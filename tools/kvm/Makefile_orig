@@ -2,12 +2,10 @@
 # Define WERROR=0 to disable -Werror.
 #
 
-WERROR=0
-
 ifeq ($(strip $(V)),)
 	E = @echo
 #	Q = @
-	Q =
+	Q = 
 else
 	E = @\#
 	Q =
@@ -22,7 +20,6 @@ CSCOPE	:= cscope
 TAGS	:= ctags
 
 PROGRAM	:= kvm
-LIBRARY	:= libkvm.so
 
 GUEST_INIT := guest/init
 
@@ -47,6 +44,7 @@ OBJS	+= interrupt.o
 OBJS	+= ioport.o
 OBJS	+= kvm-cpu.o
 OBJS	+= kvm.o
+OBJS	+= main.o
 OBJS	+= mmio.o
 OBJS	+= pci.o
 OBJS	+= read-write.o
@@ -135,7 +133,6 @@ OBJS	+= bios/bios-rom.o
 LIBS	+= -lrt
 LIBS	+= -lpthread
 LIBS	+= -lutil
-LIBS	+= -lelf
 
 # Additional ARCH settings for x86
 ARCH ?= $(shell echo $(uname_M) | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
@@ -183,19 +180,15 @@ WARNINGS += -Wwrite-strings
 
 CFLAGS	+= $(WARNINGS)
 
-all: $(PROGRAM) $(LIBRARY) $(GUEST_INIT)
+all: $(PROGRAM) $(GUEST_INIT)
 
 KVMTOOLS-VERSION-FILE:
 	@$(SHELL_PATH) util/KVMTOOLS-VERSION-GEN $(OUTPUT)
 -include $(OUTPUT)KVMTOOLS-VERSION-FILE
 
-$(PROGRAM): $(DEPS) $(OBJS) main.o
+$(PROGRAM): $(DEPS) $(OBJS)
 	$(E) "  LINK    " $@
-	$(Q) $(CC) $(OBJS)  main.o $(LIBS) -o $@
-
-$(LIBRARY): $(DEPS) $(OBJS)
-	$(E) "  LINK    " $@
-	$(Q) $(CC) -shared $(OBJS) $(LIBS) -o $@
+	$(Q) $(CC) $(OBJS) $(LIBS) -o $@
 
 $(GUEST_INIT): guest/init.c
 	$(E) "  LINK    " $@

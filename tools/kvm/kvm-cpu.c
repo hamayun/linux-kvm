@@ -87,6 +87,7 @@ struct kvm_cpu *kvm_cpu__init(struct kvm *kvm, unsigned long cpu_id)
 	int mmap_size;
 	int coalesced_offset;
 
+        printf("Initializing VCPU # %ld\n", cpu_id);
 	vcpu		= kvm_cpu__new(kvm);
 	if (!vcpu)
 		return NULL;

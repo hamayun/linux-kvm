@@ -105,4 +105,9 @@ static inline void *guest_real_to_host(struct kvm *kvm, u16 selector, u16 offset
 	return guest_flat_to_host(kvm, flat);
 }
 
+static inline void * host_to_guest_flat(struct kvm *kvm, void *host_addr)
+{
+	return ((void *)(host_addr - kvm->ram_start));
+}
+
 #endif /* KVM__KVM_H */

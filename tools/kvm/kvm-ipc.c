@@ -141,7 +141,7 @@ int kvm_ipc__start(int sock)
 	ev.events = EPOLLIN | EPOLLET;
 	ev.data.fd = sock;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &ev) < 0)
-		die("Failed starting IPC thread");
+		die("%d: Failed starting IPC thread", __LINE__);
 
 	stop_fd = eventfd(0, 0);
 	ev.events = EPOLLIN | EPOLLET;
@@ -150,7 +150,7 @@ int kvm_ipc__start(int sock)
 		die("Failed adding stop event to epoll");
 
 	if (pthread_create(&thread, NULL, kvm_ipc__thread, NULL) != 0)
-		die("Failed starting IPC thread");
+		die("%d: Failed starting IPC thread", __LINE__);
 
 	return 0;
 }

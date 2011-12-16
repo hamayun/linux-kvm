@@ -35,6 +35,9 @@
 #include <asm/unistd.h>
 #include <dirent.h>
 
+#include <libelf.h>
+#include <gelf.h>
+
 #define DEFINE_KVM_EXIT_REASON(reason) [reason] = #reason
 
 const char *kvm_exit_reasons[] = {
@@ -341,6 +344,7 @@ void kvm__init_ram(struct kvm *kvm)
 
 	if (kvm->ram_size < KVM_32BIT_GAP_START) {
 		/* Use a single block of RAM for 32bit RAM */
+                printf("kvm__init_ram: Single Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = kvm->ram_size;
@@ -349,6 +353,7 @@ void kvm__init_ram(struct kvm *kvm)
 		kvm__register_mem(kvm, phys_start, phys_size, host_mem);
 	} else {
 		/* First RAM range from zero to the PCI gap: */
+                printf("kvm__init_ram: Double Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = KVM_32BIT_GAP_START;
@@ -371,6 +376,8 @@ int kvm__recommended_cpus(struct kvm *kvm)
 	int ret;
 
 	ret = ioctl(kvm->sys_fd, KVM_CHECK_EXTENSION, KVM_CAP_NR_VCPUS);
+        //printf("mmh: KVM_CAP_NR_VCPUS = %d\n", ret);
+
 	if (ret <= 0)
 		die_perror("KVM_CAP_NR_VCPUS");
 
@@ -402,9 +409,11 @@ int kvm__max_cpus(struct kvm *kvm)
 	int ret;
 
 	ret = ioctl(kvm->sys_fd, KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS);
+        //printf("mmh: KVM_CAP_MAX_VCPUS = %d\n", ret);
 	if (ret <= 0)
 		ret = kvm__recommended_cpus(kvm);
 
+        //printf("mmh: KVM_CAP_MAX_VCPUS = %d\n", ret);
 	return ret;
 }
 
@@ -475,8 +484,8 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 
 	kvm->name = name;
 
-	kvm_ipc__start(kvm__create_socket(kvm));
-	kvm_ipc__register_handler(KVM_IPC_PID, kvm__pid);
+	//kvm_ipc__start(kvm__create_socket(kvm));
+	//kvm_ipc__register_handler(KVM_IPC_PID, kvm__pid);
 	return kvm;
 }
 
@@ -491,6 +500,7 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 static int load_flat_binary(struct kvm *kvm, int fd)
 {
 	void *p;
+	void *q;
 	int nr;
 
 	if (lseek(fd, 0, SEEK_SET) < 0)
@@ -499,13 +509,175 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 	p = guest_real_to_host(kvm, BOOT_LOADER_SELECTOR, BOOT_LOADER_IP);
 
 	while ((nr = read(fd, p, 65536)) > 0)
-		p += nr;
+        {
+            q = host_to_guest_flat(kvm, p);
+            printf("%s: Loaded %d bytes at 0x%x (Host 0x%x)\n", __func__, nr, (u32)q, (u32)p);
+            p += nr;
+        }
 
 	kvm->boot_selector	= BOOT_LOADER_SELECTOR;
 	kvm->boot_ip		= BOOT_LOADER_IP;
 	kvm->boot_sp		= BOOT_LOADER_SP;
 
 	return true;
+}
+
+static int load_elf_binary(struct kvm *kvm, int fd)
+{
+    char *section_copy[] = {(char *) ".init", (char *) ".text", (char *) ".data", (char *) ".rodata",
+                            (char *) ".rodata.str1.1", (char *) ".os_config", (char *) ".hal", (char *) ".note", (char *) ""};
+    char *section_bss = {(char *) ".bss"};
+    Elf32_Ehdr *elf_header = NULL;  /* ELF header */
+    Elf *elf = NULL;                /* Our Elf pointer for libelf */
+    Elf_Scn *scn = NULL;            /* Section Descriptor */
+    GElf_Shdr shdr;                 /* Section Header */
+    char *base_ptr;                 // ptr to our object in memory
+    struct stat elf_stats;          // fstat struct
+    int i;
+
+    void *vm_addr = kvm->ram_start;
+
+    // Move to the beginning of the file.
+    if (lseek(fd, 0, SEEK_SET) < 0)
+            die_perror("lseek");
+
+    if((fstat(fd, &elf_stats)))
+    {
+        printf("Could Not fstat\n");
+        return false;
+    }
+
+    if((u64)elf_stats.st_size > kvm->ram_size){
+        printf("%s: ERROR ELF Binary Size Too Big; ram_size = %d, binary_size = %d\n",
+               __func__, (int)kvm->ram_size, (int)elf_stats.st_size);
+        return false;
+    }
+
+    if((base_ptr = (char *) malloc(elf_stats.st_size)) == NULL)
+    {
+        printf("Could Not malloc\n");
+        return false;
+    }
+
+    if((i = read(fd, base_ptr, elf_stats.st_size)) < elf_stats.st_size)
+    {
+        printf("could not read, bytes read = %d, elf_stats.st_size = %d\n", i, elf_stats.st_size);
+
+        i = read(fd, base_ptr+i, 4);
+        printf("Read More %d bytes\n", i);
+
+        free(base_ptr);
+        return false;
+    }
+
+    /* Check libelf version first */
+    if(elf_version(EV_CURRENT) == EV_NONE)
+    {
+        printf("WARNING Elf Library is out of date!\n");
+    }
+
+    elf_header = (Elf32_Ehdr *) base_ptr;    // point elf_header at our object in memory
+    elf = elf_begin(fd, ELF_C_READ, NULL);    // Initialize 'elf' pointer to our file descriptor
+
+    printf("%s: Loading ELF Binary at vm_addr: 0x%x, Size = %d\n", __func__, (uint32_t)vm_addr, (int)elf_stats.st_size);
+    printf("Section Type        Flags\tVirt Addr\tSize (bytes)\tOffset\t           Name\n");
+    /* Iterate through section headers */
+    while((scn = elf_nextscn(elf, scn)) != 0)
+    {
+        // point shdr at this section header entry
+        gelf_getshdr(scn, &shdr);
+
+        // print the Section Type
+        switch(shdr.sh_type)
+        {
+            case SHT_NULL:              printf("SHT_NULL            ");break;
+            case SHT_PROGBITS:          printf("SHT_PROGBITS        ");break;
+            case SHT_SYMTAB:            printf("SHT_SYMTAB          ");break;
+            case SHT_STRTAB:            printf("SHT_STRTAB          ");break;
+            case SHT_RELA:              printf("SHT_RELA            ");break;
+            case SHT_HASH:              printf("SHT_HASH            ");break;
+            case SHT_DYNAMIC:           printf("SHT_DYNAMIC         ");break;
+            case SHT_NOTE:              printf("SHT_NOTE            ");break;
+            case SHT_NOBITS:            printf("SHT_NOBITS          ");break;
+            case SHT_REL:               printf("SHT_REL             ");break;
+            case SHT_SHLIB:             printf("SHT_SHLIB           ");break;
+            case SHT_DYNSYM:            printf("SHT_DYNSYM          ");break;
+            case SHT_INIT_ARRAY:        printf("SHT_INIT_ARRAY      ");break;
+            case SHT_FINI_ARRAY:        printf("SHT_FINI_ARRAY      ");break;
+            case SHT_PREINIT_ARRAY:     printf("SHT_PREINIT_ARRAY   ");break;
+            case SHT_GROUP:             printf("SHT_GROUP           ");break;
+            case SHT_SYMTAB_SHNDX:      printf("SHT_SYMTAB_SHNDX    ");break;
+            case SHT_NUM:               printf("SHT_NUM             ");break;
+            case SHT_LOOS:              printf("SHT_LOOS            ");break;
+            case SHT_GNU_ATTRIBUTES:    printf("SHT_GNU_ATTRIBUTES  ");break;
+            case SHT_GNU_HASH:          printf("SHT_GNU_HASH        ");break;
+            case SHT_GNU_LIBLIST:       printf("SHT_GNU_LIBLIST     ");break;
+            case SHT_CHECKSUM:          printf("SHT_CHECKSUM        ");break;
+            case SHT_LOSUNW:            printf("SHT_LOSUNW          ");break;
+            case SHT_SUNW_COMDAT:       printf("SHT_SUNW_COMDAT     ");break;
+            case SHT_SUNW_syminfo:      printf("SHT_SUNW_syminfo    ");break;
+            case SHT_GNU_verdef:        printf("SHT_GNU_verdef      ");break;
+            case SHT_GNU_verneed:       printf("SHT_VERNEED         ");break;
+            case SHT_GNU_versym:        printf("SHT_GNU_versym      ");break;
+            case SHT_LOPROC:            printf("SHT_LOPROC          ");break;
+            case SHT_HIPROC:            printf("SHT_HIPROC          ");break;
+            case SHT_LOUSER:            printf("SHT_LOUSER          ");break;
+            case SHT_HIUSER:            printf("SHT_HIUSER          ");break;
+            default:                    printf("(none)              ");break;
+        }
+
+        // print the section header Flags
+        if(shdr.sh_flags & SHF_WRITE) { printf("W"); }
+        if(shdr.sh_flags & SHF_ALLOC) { printf("A"); }
+        if(shdr.sh_flags & SHF_EXECINSTR) { printf("X"); }
+        if(shdr.sh_flags & SHF_STRINGS) { printf("S"); }
+        printf("\t\t");
+
+        // Virt Addr
+        printf("0x%08llx\t", (uint64_t)shdr.sh_addr);
+        // Size (bytes)
+        printf("%lld\t\t", (uint64_t)shdr.sh_size);
+        // Offset
+        printf("0x%llx\t", (uint64_t)shdr.sh_offset);
+
+        // the shdr Name is in a string table, libelf uses elf_strptr() to find it
+        // using the e_shstrndx value from the elf_header
+        printf("%15s\t", elf_strptr(elf, elf_header->e_shstrndx, shdr.sh_name));
+
+        // Load binary to memory address.
+        for(i = 0; strcmp(section_copy[i], "") != 0; i++)
+        {
+            if(strcmp(section_copy[i], elf_strptr(elf, elf_header->e_shstrndx, shdr.sh_name)) == 0)
+            {
+                u64 n = 0;
+                Elf_Data *edata = NULL;         /* Data Descriptor */
+                while( (n < shdr.sh_size) && ((edata = elf_getdata(scn, edata)) != NULL))
+                {
+                    memcpy(vm_addr + shdr.sh_addr + n, edata->d_buf, edata->d_size);
+                    n += edata->d_size;
+                }
+                printf("Loaded ...  %7d Bytes @ 0x%x (KVM: 0x%x)", (u32)n,
+                       (uint32_t)(vm_addr + shdr.sh_addr), (uint32_t) shdr.sh_addr);
+            }
+        }
+
+        if(strcmp(section_bss, elf_strptr(elf, elf_header->e_shstrndx, shdr.sh_name)) == 0)
+        {
+            memset(vm_addr + shdr.sh_addr, 0, shdr.sh_size);
+            printf("Initialized %7d Bytes @ 0x%x (KVM: 0x%x)", (int)shdr.sh_size,
+                   (uint32_t)(vm_addr + shdr.sh_addr), (uint32_t)(shdr.sh_addr));
+        }
+
+        printf("\n");
+    }
+
+    free(base_ptr);
+
+    kvm->boot_selector	= BOOT_LOADER_SELECTOR;
+    kvm->boot_ip	= 0x4343;
+    kvm->boot_sp	= BOOT_LOADER_SP;
+
+    return true;
 }
 
 static const char *BZIMAGE_MAGIC	= "HdrS";
@@ -636,7 +808,7 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 		const char *initrd_filename, const char *kernel_cmdline, u16 vidmode)
 {
 	bool ret;
-	int fd_kernel = -1, fd_initrd = -1;
+	int fd_kernel = -1, fd_initrd = -1, fd_bootstrap = -1;
 
 	fd_kernel = open(kernel_filename, O_RDONLY);
 	if (fd_kernel < 0)
@@ -661,9 +833,22 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 
 	pr_warning("%s is not a bzImage. Trying to load it as a flat binary...", kernel_filename);
 
-	ret = load_flat_binary(kvm, fd_kernel);
-	if (ret)
-		goto found_kernel;
+#if 0
+        fd_bootstrap = open("/home/hamayun/workspace/NaSiK/hw/kvm-85/user/test/x86/bootstrap", O_RDONLY);
+	if (fd_bootstrap < 0)
+		die("Unable to open kernel %s", kernel_filename);
+
+	ret = load_flat_binary(kvm, fd_bootstrap);
+	if (!ret){
+            close(fd_bootstrap);
+            die("Failed in loading bootstrap");
+        }
+#endif
+        ret = load_elf_binary(kvm, fd_kernel);
+        if (ret){
+            close(fd_bootstrap);
+            goto found_kernel;
+        }
 
 	close(fd_kernel);
 
@@ -684,7 +869,7 @@ found_kernel:
  */
 void kvm__setup_bios(struct kvm *kvm)
 {
-	/* standart minimal configuration */
+	/* standard minimal configuration */
 	setup_bios(kvm);
 
 	/* FIXME: SMP, ACPI and friends here */

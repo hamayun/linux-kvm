@@ -65,6 +65,11 @@ struct kvm_cpu *kvm_cpus[KVM_NR_CPUS];
 __thread struct kvm_cpu *current_kvm_cpu;
 
 static u64 ram_size;
+
+// Variabls for the platform main file
+uint64_t kvm_ram_size = 0;
+void *   kvm_userspace_mem_addr = NULL;
+
 static u8  image_count;
 static u8 num_net_devices;
 static bool virtio_rng;
@@ -712,6 +717,11 @@ int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 	int i;
 	void *ret;
 
+        for (i = 0; i < argc; i++)
+        {
+            printf("argv[%d] = %s\n", i, argv[i]);
+        }
+
 	signal(SIGALRM, handle_sigalrm);
 	kvm_ipc__register_handler(KVM_IPC_DEBUG, handle_debug);
 	signal(SIGUSR1, handle_sigusr1);
@@ -758,6 +768,7 @@ int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 
 	if (!ram_size)
 		ram_size	= get_ram_size(nrcpus);
+        printf("  # Allocating %lld MB of RAM for %d CPUs\n", ram_size, nrcpus);
 
 	if (ram_size < MIN_RAM_SIZE_MB)
 		die("Not enough memory specified: %lluMB (min %lluMB)", ram_size, MIN_RAM_SIZE_MB);
@@ -802,6 +813,7 @@ int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 		guest_name = default_name;
 	}
 
+        kvm_ram_size = ram_size;
 	kvm = kvm__init(dev, ram_size, guest_name);
 
 	irq__init(kvm);
@@ -943,6 +955,7 @@ int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 	}
 
 	kvm__init_ram(kvm);
+        kvm_userspace_mem_addr = kvm->ram_start;
 
 	kbd__init(kvm);
 
