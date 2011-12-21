@@ -489,8 +489,10 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 	return kvm;
 }
 
-#define BOOT_LOADER_SELECTOR	0x1000
-#define BOOT_LOADER_IP		0x0000
+//#define BOOT_LOADER_SELECTOR	0x1000
+//#define BOOT_LOADER_IP		0x0000
+#define BOOT_LOADER_SELECTOR	0x0000
+#define BOOT_LOADER_IP		0x7C00
 #define BOOT_LOADER_SP		0x8000
 #define BOOT_CMDLINE_OFFSET	0x20000
 
@@ -525,6 +527,8 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 static int load_elf_binary(struct kvm *kvm, int fd)
 {
     char *section_copy[] = {(char *) ".init", (char *) ".text", (char *) ".data", (char *) ".rodata",
+                            (char *) ".bstext", (char *) ".bsdata", (char *) ".header", (char *) ".entrytext",
+                            (char *) ".inittext", (char *) ".initdata", (char *) ".text32", (char *) ".signature",
                             (char *) ".rodata.str1.1", (char *) ".os_config", (char *) ".hal", (char *) ".note", (char *) ""};
     char *section_bss = {(char *) ".bss"};
     Elf32_Ehdr *elf_header = NULL;  /* ELF header */
@@ -673,9 +677,11 @@ static int load_elf_binary(struct kvm *kvm, int fd)
 
     free(base_ptr);
 
+    /*
     kvm->boot_selector	= BOOT_LOADER_SELECTOR;
-    kvm->boot_ip	= 0x4343;
+    kvm->boot_ip	= BOOT_LOADER_IP;
     kvm->boot_sp	= BOOT_LOADER_SP;
+     */
 
     return true;
 }
@@ -831,26 +837,34 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 	if (ret)
 		goto found_kernel;
 
-	pr_warning("%s is not a bzImage. Trying to load it as a flat binary...", kernel_filename);
-
-#if 0
-        fd_bootstrap = open("/home/hamayun/workspace/NaSiK/hw/kvm-85/user/test/x86/bootstrap", O_RDONLY);
+#if 1
+	pr_warning("%s is not a bzImage. Trying to load it as a ELF binary...", kernel_filename);
+        fd_bootstrap = open("/home/hamayun/sandbox/bootloader_marius/test_i386_dna_th/boot/16/bin/setup.bin", O_RDONLY);
 	if (fd_bootstrap < 0)
-		die("Unable to open kernel %s", kernel_filename);
+		die("Unable to open bootstrap.bin");
 
-	ret = load_flat_binary(kvm, fd_bootstrap);
-	if (!ret){
+        ret = load_flat_binary(kvm, fd_bootstrap);
+        if (!ret){
             close(fd_bootstrap);
             die("Failed in loading bootstrap");
         }
-#endif
+
         ret = load_elf_binary(kvm, fd_kernel);
         if (ret){
             close(fd_bootstrap);
             goto found_kernel;
         }
 
-	close(fd_kernel);
+#else
+        pr_warning("%s is not a bzImage. Trying to load it as a flat binary...", kernel_filename);
+	ret = load_flat_binary(kvm, fd_kernel);
+	if (!ret){
+            close(fd_kernel);
+            die("Failed in loading bootstrap");
+        }
+#endif
+
+        close(fd_kernel);
 
 	die("%s is not a valid bzImage or flat binary", kernel_filename);
 

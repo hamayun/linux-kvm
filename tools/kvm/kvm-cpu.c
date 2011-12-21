@@ -19,11 +19,16 @@
 extern struct kvm_cpu *kvm_cpus[KVM_NR_CPUS];
 extern __thread struct kvm_cpu *current_kvm_cpu;
 
-static int debug_fd;
+//static int debug_fd;
+static FILE * debug_fd;
+
+#define dprintf fprintf
 
 void kvm_cpu__set_debug_fd(int fd)
 {
-	debug_fd = fd;
+	//debug_fd = fd;
+        //debug_fd = STDOUT_FILENO;
+        debug_fd = stdout;
 }
 
 int kvm_cpu__get_debug_fd(void)
@@ -267,6 +272,7 @@ void kvm_cpu__show_registers(struct kvm_cpu *vcpu)
 	r10 = regs.r10; r11 = regs.r11; r12 = regs.r12;
 	r13 = regs.r13; r14 = regs.r14; r15 = regs.r15;
 
+        debug_fd = stdout;
 	dprintf(debug_fd, "\n Registers:\n");
 	dprintf(debug_fd,   " ----------\n");
 	dprintf(debug_fd, " rip: %016lx   rsp: %016lx flags: %016lx\n", rip, rsp, rflags);
