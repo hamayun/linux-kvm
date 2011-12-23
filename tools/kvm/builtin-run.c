@@ -739,7 +739,10 @@ static void generic_systemc_mmio_handler(u64 addr, u8 *data, u32 len, u8 is_writ
 
 static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
 {
-    kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
+    //TODO: Move these registration steps to kvm_processor component and use node maps.
+    // Also consider modifying the node maps for device type; Input/Output or Output only.
+    // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
+    kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_systemc_mmio_handler, NULL);
@@ -820,12 +823,12 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
 	if (!console)
 		console = DEFAULT_CONSOLE;
 
-/*
 	if (!strncmp(console, "virtio", 6))
 		active_console  = CONSOLE_VIRTIO;
 	else
 		active_console  = CONSOLE_8250;
 
+/*
 	if (!host_ip)
 		host_ip = DEFAULT_HOST_ADDR;
 
@@ -862,11 +865,11 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
 
         kvm_register_systemc_mmio_callbacks(kvm);
 
-	irq__init(kvm);
+	//irq__init(kvm);
 
 	kvm->single_step = single_step;
 
-	ioeventfd__init();
+	//ioeventfd__init();
 
 	max_cpus = kvm__max_cpus(kvm);
 	recommended_cpus = kvm__recommended_cpus(kvm);
@@ -961,15 +964,13 @@ int kvm_cmd_run(void)
         int exit_code = 0;
         void *ret;
 
-/*
-	ioport__setup_legacy();
+	//ioport__setup_legacy();
 
-	rtc__init();
+	//rtc__init();
 
 	serial8250__init(kvm);
 
-	pci__init();
-*/
+	//pci__init();
 
 /*
 	if (active_console == CONSOLE_VIRTIO)
@@ -1067,9 +1068,9 @@ int kvm_cmd_run(void)
 
 	compat__print_all_messages();
 
+/*
 	fb__stop();
 
-/*
 	virtio_blk__delete_all(kvm);
 	virtio_rng__delete_all(kvm);
 

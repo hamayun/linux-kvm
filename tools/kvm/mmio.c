@@ -56,7 +56,7 @@ static const char *to_direction(u8 is_write)
 	return "read";
 }
 
-bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void (*mmio_fn)(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr), void *ptr)
+bool kvm__register_coalesced_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void (*mmio_fn)(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr), void *ptr)
 {
 	struct mmio_mapping *mmio;
 	struct kvm_coalesced_mmio_zone zone;
@@ -81,6 +81,28 @@ bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void 
 		free(mmio);
 		return false;
 	}
+
+	br_write_lock();
+	ret = mmio_insert(&mmio_tree, mmio);
+	br_write_unlock();
+
+	return ret;
+}
+
+bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void (*mmio_fn)(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr), void *ptr)
+{
+	struct mmio_mapping *mmio;
+	int ret;
+
+	mmio = malloc(sizeof(*mmio));
+	if (mmio == NULL)
+		return false;
+
+	*mmio = (struct mmio_mapping) {
+		.node = RB_INT_INIT(phys_addr, phys_addr + phys_addr_len),
+		.mmio_fn = mmio_fn,
+		.ptr	= ptr,
+	};
 
 	br_write_lock();
 	ret = mmio_insert(&mmio_tree, mmio);

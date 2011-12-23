@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 #define PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
+//#define DEBUG_MMIO
 
 extern struct kvm_cpu *kvm_cpus[KVM_NR_CPUS];
 extern __thread struct kvm_cpu *current_kvm_cpu;
@@ -26,9 +27,7 @@ static FILE * debug_fd;
 
 void kvm_cpu__set_debug_fd(int fd)
 {
-	//debug_fd = fd;
-        //debug_fd = STDOUT_FILENO;
-        debug_fd = stdout;
+	debug_fd = fd;
 }
 
 int kvm_cpu__get_debug_fd(void)
@@ -427,9 +426,34 @@ static void kvm_cpu_signal_handler(int signum)
 static void kvm_cpu__handle_coalesced_mmio(struct kvm_cpu *cpu)
 {
 	if (cpu->ring) {
+#ifdef DEBUG_MMIO
+                if(cpu->ring->first != cpu->ring->last){
+                        struct kvm_coalesced_mmio *m;
+                        __u32 first = cpu->ring->first, last = cpu->ring->last;
+
+                        while (first != last)
+                        {
+                            m = &cpu->ring->coalesced_mmio[first];
+
+                            if(m->len == 1)
+                            {
+                                printf(">>>>COALESCED_MMIO (Write): Address = 0x%08X, Length = %d, Data = %c\n",
+                                       (u32) m->phys_addr, (u32) m->len, m->data[0]);
+                            }
+                            else
+                            {
+                                printf(">>>>COALESCED_MMIO (Write): Address = 0x%08X, Length = %d, Data = 0x%08X\n",
+                                       (u32) m->phys_addr, (u32) m->len, *((u32 * )m->data));
+                            }
+
+                            first = (first + 1) % KVM_COALESCED_MMIO_MAX;
+                        }
+                }
+#endif
 		while (cpu->ring->first != cpu->ring->last) {
 			struct kvm_coalesced_mmio *m;
 			m = &cpu->ring->coalesced_mmio[cpu->ring->first];
+
 			kvm__emulate_mmio(cpu->kvm,
 					m->phys_addr,
 					m->data,
@@ -499,8 +523,11 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		}
 		case KVM_EXIT_MMIO: {
 			bool ret;
-
-			ret = kvm__emulate_mmio(cpu->kvm,
+#ifdef DEBUG_MMIO
+                        printf("NORMAL_MMIO: Address = 0x%08X, Length = %d, is_write = %d\n",
+                               (u32) cpu->kvm_run->mmio.phys_addr, (u32) cpu->kvm_run->mmio.len, (u32) cpu->kvm_run->mmio.is_write);
+#endif
+                        ret = kvm__emulate_mmio(cpu->kvm,
 					cpu->kvm_run->mmio.phys_addr,
 					cpu->kvm_run->mmio.data,
 					cpu->kvm_run->mmio.len,

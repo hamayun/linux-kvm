@@ -22,7 +22,7 @@ CSCOPE	:= cscope
 TAGS	:= ctags
 
 PROGRAM	:= kvm
-LIBRARY	:= libkvm.so
+LIBRARY	:= libkvm-tool.so
 
 GUEST_INIT := guest/init
 
@@ -282,6 +282,7 @@ clean:
 	$(Q) rm -f cscope.*
 	$(Q) rm -f $(KVM_INCLUDE)/common-cmds.h
 	$(Q) rm -f KVMTOOLS-VERSION-FILE
+	$(Q) rm -f $(LIBRARY) 
 .PHONY: clean
 
 KVM_DEV	?= /dev/kvm

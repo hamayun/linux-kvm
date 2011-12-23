@@ -98,6 +98,7 @@ static void callback_mmio_msix(u64 addr, u8 *data, u32 len, u8 is_write, void *p
 {
 	void *mem;
 
+        printf("callback_mmio_msix called\n");
 	if (addr - msix_block < 0x1000)
 		mem = &msix_table;
 	else
