@@ -742,12 +742,45 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     //TODO: Move these registration steps to kvm_processor component and use node maps.
     // Also consider modifying the node maps for device type; Input/Output or Output only.
     // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
+
     kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_systemc_mmio_handler, NULL);
+
+    kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_systemc_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC4000000, 0x100000, generic_systemc_mmio_handler, NULL);
+
     kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC6A00000, 0x100000, generic_systemc_mmio_handler, NULL);
     return 0;
+}
+
+static bool semihosting_io_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+{
+    uint32_t * pdata = (uint32_t *) data;
+    *pdata = 1;
+
+    printf("semihosting_io_in: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+    return true;
+}
+
+static bool semihosting_io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+{
+    uint32_t * pdata = (uint32_t *) data;
+
+    printf("semihosting_io_out: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+    return true;
+}
+
+static struct ioport_operations semihosting_read_write_ioport_ops = {
+    .io_in		= semihosting_io_in,
+    .io_out		= semihosting_io_out,
+};
+
+
+static int kvm_register_io_callbacks(struct kvm *kvm)
+{
+    ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
 }
 
 int kvm_internel_init(int argc, const char **argv, const char *prefix)
@@ -864,6 +897,7 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
                 (uint32_t) kvm_userspace_mem_addr, (uint32_t) kvm_ram_size);
 
         kvm_register_systemc_mmio_callbacks(kvm);
+        kvm_register_io_callbacks(kvm);
 
 	//irq__init(kvm);
 

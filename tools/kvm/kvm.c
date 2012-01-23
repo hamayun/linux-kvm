@@ -376,8 +376,6 @@ int kvm__recommended_cpus(struct kvm *kvm)
 	int ret;
 
 	ret = ioctl(kvm->sys_fd, KVM_CHECK_EXTENSION, KVM_CAP_NR_VCPUS);
-        //printf("mmh: KVM_CAP_NR_VCPUS = %d\n", ret);
-
 	if (ret <= 0)
 		die_perror("KVM_CAP_NR_VCPUS");
 
@@ -409,11 +407,9 @@ int kvm__max_cpus(struct kvm *kvm)
 	int ret;
 
 	ret = ioctl(kvm->sys_fd, KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS);
-        //printf("mmh: KVM_CAP_MAX_VCPUS = %d\n", ret);
 	if (ret <= 0)
 		ret = kvm__recommended_cpus(kvm);
 
-        //printf("mmh: KVM_CAP_MAX_VCPUS = %d\n", ret);
 	return ret;
 }
 
@@ -491,8 +487,10 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 
 //#define BOOT_LOADER_SELECTOR	0x1000
 //#define BOOT_LOADER_IP		0x0000
+
 #define BOOT_LOADER_SELECTOR	0x0000
 #define BOOT_LOADER_IP		0x7C00
+
 #define BOOT_LOADER_SP		0x8000
 #define BOOT_CMDLINE_OFFSET	0x20000
 
@@ -839,7 +837,8 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 
 #if 1
 	pr_warning("%s is not a bzImage. Trying to load it as a ELF binary...", kernel_filename);
-        fd_bootstrap = open("/home/hamayun/sandbox/bootloader_marius/test_i386_dna_th/boot/16/bin/setup.bin", O_RDONLY);
+        //fd_bootstrap = open("/home/hamayun/sandbox/bootloader_marius/test_i386_dna_th/boot/16/bin/setup.bin", O_RDONLY);
+        fd_bootstrap = open("/home/hamayun/workspace/NaSiK/hw/kvm-85/user/test/x86/bootstrap", O_RDONLY);
 	if (fd_bootstrap < 0)
 		die("Unable to open bootstrap.bin");
 
