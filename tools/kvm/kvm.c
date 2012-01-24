@@ -488,8 +488,11 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 //#define BOOT_LOADER_SELECTOR	0x1000
 //#define BOOT_LOADER_IP		0x0000
 
-#define BOOT_LOADER_SELECTOR	0x0000
-#define BOOT_LOADER_IP		0x7C00
+//#define BOOT_LOADER_SELECTOR	0x0000
+//#define BOOT_LOADER_IP		0x7C00
+
+#define BOOT_LOADER_SELECTOR	0x1000
+#define BOOT_LOADER_IP		0x0000
 
 #define BOOT_LOADER_SP		0x8000
 #define BOOT_CMDLINE_OFFSET	0x20000

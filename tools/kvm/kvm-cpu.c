@@ -238,7 +238,7 @@ void kvm_cpu__reset_vcpu(struct kvm_cpu *vcpu)
 	kvm_cpu__setup_regs(vcpu);
 
 	//debug_fd = stdout;
-	//dprintf(debug_fd, "\n KVM Segment Registers Final [CPU # %d]:\n", vcpu->cpu_id);
+	//dprintf(debug_fd, "\n KVM Segment Registers Final [CPU#%d]:\n", vcpu->cpu_id);
 	//kvm_cpu__show_registers(vcpu);
 
 	kvm_cpu__setup_fpu(vcpu);
@@ -525,10 +525,13 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 
 		switch (cpu->kvm_run->exit_reason) {
 		case KVM_EXIT_UNKNOWN:
+                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X\n", cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason);
 			break;
 		case KVM_EXIT_DEBUG:
-			kvm_cpu__show_registers(cpu);
-			kvm_cpu__show_code(cpu);
+                        if(cpu->cpu_id != 0){
+                                kvm_cpu__show_registers(cpu);
+                                //kvm_cpu__show_code(cpu);
+                        }
 			break;
 		case KVM_EXIT_IO: {
 			bool ret;
@@ -551,11 +554,23 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
                         printf("NORMAL_MMIO: Address = 0x%08X, Length = %d, is_write = %d\n",
                                (u32) cpu->kvm_run->mmio.phys_addr, (u32) cpu->kvm_run->mmio.len, (u32) cpu->kvm_run->mmio.is_write);
 #endif
-                        ret = kvm__emulate_mmio(cpu->kvm,
-					cpu->kvm_run->mmio.phys_addr,
-					cpu->kvm_run->mmio.data,
-					cpu->kvm_run->mmio.len,
-					cpu->kvm_run->mmio.is_write);
+                        if(cpu->kvm_run->mmio.phys_addr == 0xDEB00000)
+                        {
+                            printf("DEBUG_MMIO: Data = 0x%08X, Length = %d\n",
+                                    cpu->kvm_run->mmio.data,
+                                    cpu->kvm_run->mmio.len);
+
+                            kvm_cpu__enable_singlestep(cpu);
+                            ret = 1;
+                        }
+                        else
+                        {
+                            ret = kvm__emulate_mmio(cpu->kvm,
+                                            cpu->kvm_run->mmio.phys_addr,
+                                            cpu->kvm_run->mmio.data,
+                                            cpu->kvm_run->mmio.len,
+                                            cpu->kvm_run->mmio.is_write);
+                        }
 
 			if (!ret)
 				goto panic_kvm;
