@@ -211,7 +211,7 @@ void mptable_setup(struct kvm *kvm, unsigned int ncpus)
 	 */
 	mpc_intsrc		= last_addr;
 	mpc_intsrc->type	= MP_LINTSRC;
-	mpc_intsrc->irqtype	= mp_ExtINT;
+	mpc_intsrc->irqtype	= mp_ExtINT;    // MMH; Looks useless !!!
 	mpc_intsrc->irqtype	= mp_INT;
 	mpc_intsrc->irqflag	= MP_IRQDIR_DEFAULT;
 	mpc_intsrc->srcbus	= isabusid;

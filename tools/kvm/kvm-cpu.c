@@ -528,7 +528,8 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
                         printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X\n", cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason);
 			break;
 		case KVM_EXIT_DEBUG:
-                        if(cpu->cpu_id != 0){
+                        //if(cpu->cpu_id != 0)
+                        {
                                 kvm_cpu__show_registers(cpu);
                                 //kvm_cpu__show_code(cpu);
                         }

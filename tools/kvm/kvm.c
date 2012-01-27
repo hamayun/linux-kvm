@@ -843,7 +843,7 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
         //fd_bootstrap = open("/home/hamayun/sandbox/bootloader_marius/test_i386_dna_th/boot/16/bin/setup.bin", O_RDONLY);
         fd_bootstrap = open("/home/hamayun/workspace/NaSiK/hw/kvm-85/user/test/x86/bootstrap", O_RDONLY);
 	if (fd_bootstrap < 0)
-		die("Unable to open bootstrap.bin");
+		die("Unable to open bootstrap");
 
         ret = load_flat_binary(kvm, fd_bootstrap);
         if (!ret){
