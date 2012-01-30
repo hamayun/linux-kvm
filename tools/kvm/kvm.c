@@ -514,7 +514,7 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 	while ((nr = read(fd, p, 65536)) > 0)
         {
             q = host_to_guest_flat(kvm, p);
-            printf("%s: Loaded %d bytes at 0x%x (Host 0x%x)\n", __func__, nr, (u32)q, (u32)p);
+            printf("%s: Loaded 0x%X bytes at 0x%X (Host 0x%x)\n", __func__, nr, (u32)q, (u32)p);
             p += nr;
         }
 

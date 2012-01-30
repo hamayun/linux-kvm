@@ -380,7 +380,7 @@ void kvm_cpu__show_code(struct kvm_cpu *vcpu)
         dprintf(debug_fd, "\n");
 	dprintf(debug_fd, " Stack:\n");
 	dprintf(debug_fd, " ------\n");
-	kvm__dump_mem(vcpu->kvm, vcpu->regs.rsp, 32);
+	kvm__dump_mem(vcpu->kvm, (vcpu->regs.rsp)-32, 64);
 }
 
 void kvm_cpu__show_page_tables(struct kvm_cpu *vcpu)
@@ -528,10 +528,10 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
                         printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X\n", cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason);
 			break;
 		case KVM_EXIT_DEBUG:
-                        //if(cpu->cpu_id != 0)
+                        if(cpu->cpu_id != 0)
                         {
                                 kvm_cpu__show_registers(cpu);
-                                //kvm_cpu__show_code(cpu);
+                                kvm_cpu__show_code(cpu);
                         }
 			break;
 		case KVM_EXIT_IO: {
