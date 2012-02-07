@@ -509,8 +509,11 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 	kvm_cpu__setup_cpuid(cpu);
 	kvm_cpu__reset_vcpu(cpu);
 
-	if (cpu->kvm->single_step)
+	if (cpu->kvm->single_step && cpu->cpu_id != 0)
+        {
 		kvm_cpu__enable_singlestep(cpu);
+                printf("KVM Single Stepping Enabled ... [CPU#%d]\n", cpu->cpu_id);
+        }
 
 	while (cpu->is_running) {
 		if (cpu->paused) {
@@ -518,17 +521,18 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 			cpu->paused = 0;
 		}
 
-                if(cpu->cpu_id != 0)
-                        printf("Calling CPU Run for CPU %2d\n", cpu->cpu_id);
+                //if(cpu->cpu_id != 0)
+                //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
 
 		kvm_cpu__run(cpu);
 
 		switch (cpu->kvm_run->exit_reason) {
 		case KVM_EXIT_UNKNOWN:
-                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X\n", cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason);
-			break;
+                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+                                cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
+                        break;
 		case KVM_EXIT_DEBUG:
-                        if(cpu->cpu_id != 0)
+                        //if(cpu->cpu_id != 0)
                         {
                                 kvm_cpu__show_registers(cpu);
                                 kvm_cpu__show_code(cpu);

@@ -998,7 +998,7 @@ int kvm_cmd_run(void)
         int exit_code = 0;
         void *ret;
 
-	//ioport__setup_legacy();
+	ioport__setup_legacy();
 
 	//rtc__init();
 
