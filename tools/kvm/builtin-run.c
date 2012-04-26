@@ -45,6 +45,8 @@
 #include <ctype.h>
 #include <stdio.h>
 
+#include "gdb_srv.h"
+
 #define DEFAULT_KVM_DEV		"/dev/kvm"
 #define DEFAULT_CONSOLE		"serial"
 #define DEFAULT_NETWORK		"user"
@@ -61,12 +63,17 @@
 #define MIN_RAM_SIZE_BYTE	(MIN_RAM_SIZE_MB << MB_SHIFT)
 
 struct kvm *kvm;
+
+struct kvm * crt_kvm_instance = NULL;
+struct kvm * kvm_instances[10];
+int          no_kvm_instances = 0;
+
 struct kvm_cpu *kvm_cpus[KVM_NR_CPUS];
 __thread struct kvm_cpu *current_kvm_cpu;
 
 static u64 ram_size;
 
-// Variabls for the platform main file
+// Variables for the platform main file
 uint64_t kvm_ram_size = 0;
 void *   kvm_userspace_mem_addr = NULL;
 
@@ -781,9 +788,10 @@ static struct ioport_operations semihosting_read_write_ioport_ops = {
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
     ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
+	return 0;
 }
 
-int kvm_internel_init(int argc, const char **argv, const char *prefix)
+void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, const char *prefix)
 {
 	static char real_cmdline[2048], default_name[20];
 	int max_cpus, recommended_cpus;
@@ -793,6 +801,9 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
         {
             printf("argv[%d] = %s\n", i, argv[i]);
         }
+
+	// Fill in the function table for SystemC (Called by Platform or Components)
+	ki->gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
 
 	signal(SIGALRM, handle_sigalrm);
 	kvm_ipc__register_handler(KVM_IPC_DEBUG, handle_debug);
@@ -889,6 +900,12 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
 	}
 
 	kvm = kvm__init(dev, ram_size, guest_name);
+        crt_kvm_instance = kvm;
+        if(1)
+        {
+            // Initialize the GDB Server
+            gdb_server_init (kvm);
+        }
 
         kvm_userspace_mem_addr = kvm->ram_start;
         kvm_ram_size = kvm->ram_size;
@@ -988,7 +1005,7 @@ int kvm_internel_init(int argc, const char **argv, const char *prefix)
 	kvm->vmlinux		= vmlinux_filename;
 
         printf("KVM Initialized\n");
-        return 0;
+        return (void *) kvm;             // Return KVM Instance Pointer to Caller
 }
 
 int kvm_cmd_run(void)

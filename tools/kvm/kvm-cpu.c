@@ -26,9 +26,6 @@ static FILE * debug_fd;
 #define dprintf(fd, fmt, args...)                               \
     do { fprintf(fd, fmt, ##args); } while (0)
 
-//#define dprintf(fd, fmt, args...)                               \
-//    do { fprintf(fd, "[%lu]" fmt, vcpu->cpu_id, ##args); } while (0)
-
 void kvm_cpu__set_debug_fd(int fd)
 {
 	debug_fd = fd;
@@ -521,22 +518,25 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 			cpu->paused = 0;
 		}
 
-                //if(cpu->cpu_id != 0)
-                //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
+        //if(cpu->cpu_id != 0)
+        //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
 
 		kvm_cpu__run(cpu);
 
+        // Save the Current CPU Reference for GDB Server
+        current_kvm_cpu = cpu;
+
 		switch (cpu->kvm_run->exit_reason) {
 		case KVM_EXIT_UNKNOWN:
-                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
-                                cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
-                        break;
+	        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+                   cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
+            break;
 		case KVM_EXIT_DEBUG:
-                        //if(cpu->cpu_id != 0)
-                        {
-                                kvm_cpu__show_registers(cpu);
-                                kvm_cpu__show_code(cpu);
-                        }
+        	//if(cpu->cpu_id != 0)
+	        {
+    	         kvm_cpu__show_registers(cpu);
+                 kvm_cpu__show_code(cpu);
+            }
 			break;
 		case KVM_EXIT_IO: {
 			bool ret;

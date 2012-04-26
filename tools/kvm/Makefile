@@ -87,6 +87,7 @@ OBJS	+= hw/vesa.o
 OBJS	+= hw/i8042.o
 OBJS	+= hw/pci-shmem.o
 OBJS	+= kvm-ipc.o
+OBJS	+= gdb_srv.o
 
 FLAGS_BFD := $(CFLAGS) -lbfd
 has_bfd := $(call try-cc,$(SOURCE_BFD),$(FLAGS_BFD))
@@ -159,7 +160,9 @@ DEFINES	+= -D_GNU_SOURCE
 DEFINES	+= -DKVMTOOLS_VERSION='"$(KVMTOOLS_VERSION)"'
 
 KVM_INCLUDE := include
+SYSTEMC_INCLUDE := /home/hamayun/workspace/NaSiK/hw/components/kvm_wrapper_2
 CFLAGS	+= $(CPPFLAGS) $(DEFINES) -I$(KVM_INCLUDE) -I../../include -I../../arch/$(ARCH)/include/ -Os -g
+CFLAGS	+= -I$(SYSTEMC_INCLUDE)
 
 ifneq ($(WERROR),0)
 	WARNINGS += -Werror

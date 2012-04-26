@@ -25,6 +25,8 @@
 #define KVM_PID_FILE_PATH	"/.kvm-tools/"
 #define HOME_DIR		getenv("HOME")
 
+struct GDBState;
+
 struct kvm {
 	int			sys_fd;		/* For system ioctls(), i.e. /dev/kvm */
 	int			vm_fd;		/* For VM ioctls() */
@@ -52,6 +54,8 @@ struct kvm {
 	int                     nr_disks;
 
 	const char		*name;
+
+        struct GDBState         *m_gdb;
 };
 
 void kvm__set_dir(const char *fmt, ...);
