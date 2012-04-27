@@ -959,8 +959,7 @@ static void close_gdb_sockets (void)
 
 int gdb_srv_start_and_wait (struct kvm *pinstance, int port)
 {
-    printf("Inside gdb_srv_start_and_wait: KVM Instance = 0x%08X, Port = %d\n",
-            pinstance, port);
+    //printf("Inside gdb_srv_start_and_wait: KVM Instance = 0x%08X, Port = %d\n", pinstance, port);
 
     pinstance->m_gdb->running_state = GDB_STATE_DETACH;
 

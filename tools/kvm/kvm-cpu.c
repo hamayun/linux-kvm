@@ -130,6 +130,19 @@ void kvm_cpu__enable_singlestep(struct kvm_cpu *vcpu)
 		pr_warning("KVM_SET_GUEST_DEBUG failed");
 }
 
+void kvm_cpu__set_break_point(struct kvm_cpu *vcpu, unsigned long addr)
+{
+    	struct kvm * kvm   = vcpu->kvm;		/* parent KVM */
+        char * mem_addr = kvm->ram_start + addr;
+        
+        printf("Set Break Point CPU # %ld, KVM ADDR = 0x%08X\n", vcpu->cpu_id, addr);
+        printf("Previous Instr = 0x%02X\n", *mem_addr);
+        
+        *mem_addr = 0xCC;
+
+        return;
+}
+
 static struct kvm_msrs *kvm_msrs__new(size_t nmsrs)
 {
 	struct kvm_msrs *vcpu = calloc(1, sizeof(*vcpu) + (sizeof(struct kvm_msr_entry) * nmsrs));
@@ -512,32 +525,37 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
                 printf("KVM Single Stepping Enabled ... [CPU#%d]\n", cpu->cpu_id);
         }
 
+
+        //kvm_cpu__set_break_point(cpu, 0x100000);
+        //kvm_cpu__set_break_point(cpu, 0x10c088);
+
 	while (cpu->is_running) {
 		if (cpu->paused) {
 			kvm__notify_paused();
 			cpu->paused = 0;
 		}
 
-        //if(cpu->cpu_id != 0)
-        //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
+                //if(cpu->cpu_id != 0)
+                //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
 
-		kvm_cpu__run(cpu);
+                kvm_cpu__run(cpu);
 
-        // Save the Current CPU Reference for GDB Server
-        current_kvm_cpu = cpu;
+                // Save the Current CPU Reference for GDB Server
+                current_kvm_cpu = cpu;
 
-		switch (cpu->kvm_run->exit_reason) {
-		case KVM_EXIT_UNKNOWN:
-	        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
-                   cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
-            break;
+		switch (cpu->kvm_run->exit_reason)
+                {
+                    case KVM_EXIT_UNKNOWN:
+                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+                           cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
+                    break;
 		case KVM_EXIT_DEBUG:
-        	//if(cpu->cpu_id != 0)
-	        {
-    	         kvm_cpu__show_registers(cpu);
-                 kvm_cpu__show_code(cpu);
-            }
-			break;
+                    //if(cpu->cpu_id != 0)
+                    {
+                         kvm_cpu__show_registers(cpu);
+                         kvm_cpu__show_code(cpu);
+                    }
+                    break;
 		case KVM_EXIT_IO: {
 			bool ret;
 
