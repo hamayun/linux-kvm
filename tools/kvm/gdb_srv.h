@@ -44,6 +44,7 @@ struct GDBState
         unsigned long   addr[100];
         int             nb;
     } breakpoints;
+    
     struct watchpoint_t
     {
         struct watch_el_t
@@ -58,6 +59,7 @@ struct GDBState
 
 void gdb_server_init (struct kvm *pinstance);
 int gdb_srv_start_and_wait (struct kvm *pinstance, int port);
+void gdb_verify (target_ulong addr);
 void gdb_loop (int idx_watch, int bwrite, unsigned long new_val);
 int gdb_start_debug (void);
 int gdb_condition (target_ulong addr);

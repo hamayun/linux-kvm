@@ -47,6 +47,12 @@
 #define REAL_INTR_BASE			REAL_MODE_IVT_BEGIN
 #define REAL_INTR_VECTORS		256
 
+/* real mode breakpoint exceptions use the following port
+ * and give control to host code */
+/* TODO: Install handler for SingleStep in Realmode */
+#define IOPORT_SINGLESTEP    	0xE1
+#define IOPORT_BREAKPOINT		0xE3
+
 /*
  * BIOS stack must be at absolute predefined memory address
  * We reserve 64 bytes for BIOS stack
@@ -80,6 +86,7 @@ struct biosregs {
 	u32			eflags;
 };
 
+void int3_handler(struct biosregs *regs);
 void int10_handler(struct biosregs *regs);
 void int15_handler(struct biosregs *regs);
 

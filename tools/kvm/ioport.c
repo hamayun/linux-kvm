@@ -1,6 +1,7 @@
 #include "kvm/ioport.h"
 
 #include "kvm/kvm.h"
+#include "kvm/kvm-cpu.h"
 #include "kvm/util.h"
 #include "kvm/brlock.h"
 #include "kvm/rbtree-interval.h"
@@ -8,6 +9,7 @@
 
 #include <linux/kvm.h>	/* for KVM_EXIT_* */
 #include <linux/types.h>
+#include <sys/ioctl.h>
 
 #include <stdbool.h>
 #include <assert.h>
@@ -78,6 +80,25 @@ static struct ioport_operations dummy_read_write_ioport_ops = {
 
 static struct ioport_operations dummy_write_only_ioport_ops = {
 	.io_out		= dummy_io_out,
+};
+
+extern __thread struct kvm_cpu *current_kvm_cpu;
+
+static bool gdbsrv_hook_fun(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+{
+	//u8 * ptr = kvm->ram_start + *((u32 *) data);   /* data is actually the current eip */
+
+	printf("GDB Server Hook: Port = %X, Data = %X, Size = %X\n", port, *((u32 *) data), size);
+	//ptr[0] = 0xe8;
+	//printf("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+
+	gdb_verify (*((u32 *) data)); /* data is actually the current eip */
+
+	return true;
+}
+
+static struct ioport_operations gdbsrv_hook_ops = {
+	.io_out		= gdbsrv_hook_fun,
 };
 
 u16 ioport__register(u16 port, struct ioport_operations *ops, int count, void *param)
@@ -189,4 +210,8 @@ void ioport__setup_legacy(void)
 	/* PORT 03D4-03D5 - COLOR VIDEO - CRT CONTROL REGISTERS */
 	ioport__register(0x03D4, &dummy_read_write_ioport_ops, 1, NULL);
 	ioport__register(0x03D5, &dummy_write_only_ioport_ops, 1, NULL);
+
+	/* Ports to Handle SingleSteps/Breakpoints in S/W */
+	ioport__register(IOPORT_SINGLESTEP, &gdbsrv_hook_ops, 1, NULL);
+	ioport__register(IOPORT_BREAKPOINT, &gdbsrv_hook_ops, 1, NULL);
 }

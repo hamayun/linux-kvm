@@ -14,7 +14,7 @@
 
 /* If you change these macros, remember to update 'struct biosregs' */
 .macro SAVE_BIOSREGS
-	pushl	%fs
+    pushl	%fs
 	pushl	%es
 	pushl	%ds
 	pushl	%edi
@@ -54,6 +54,23 @@ ENTRY(bios_intfake)
 
 	IRET
 ENTRY_END(bios_intfake)
+
+/*
+ * interrupt handler, for breakpoint exceptions in S/W, that lends control
+ * to host mode code for further processing.
+ */
+ENTRY(bios_int3)
+    SAVE_BIOSREGS
+
+	call	int3_handler
+
+	RESTORE_BIOSREGS
+
+	/* Clear CF to indicate success.  */
+	andl	$~EFLAGS_CF, 0x4(%esp)
+
+	IRET
+ENTRY_END(bios_int3)
 
 /*
  * int 10 - video - service

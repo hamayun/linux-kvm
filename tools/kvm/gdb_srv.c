@@ -9,17 +9,11 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-/*
-#include "rabbits/cfg.h"
-#include "qemu-common.h"
-#include "cpu.h"
-#include "rabbits/qemu_encap.h"
-*/
 #include "include/kvm/kvm.h"
 #include "include/kvm/kvm-cpu.h"
 #include "gdb_srv.h"
 
-//#define DEBUG_GDB_SRV
+#define DEBUG_GDB_SRV
 
 typedef struct kvm_cpu CPUState;
 #define TARGET_ARCH "x86"
@@ -56,7 +50,21 @@ static unsigned long    watchpoint_address = 0;
 extern struct kvm     * crt_kvm_instance;
 extern struct kvm     * kvm_instances[10];
 extern int              no_kvm_instances;
-//extern unsigned long    get_phys_addr_gdb (unsigned long addr);
+
+int do_kvm_regs_sync = 0;       /* Flag as to sync KVM (Host vs. Guest Registers Once for Each GDB Read Request) */
+
+/* Number of registers.  */
+#define NUMREGS	16
+
+/* Number of bytes of registers.  */
+#define NUMREGBYTES (NUMREGS * 4)
+
+enum regnames {EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
+               PC /* also known as eip */,
+               PS /* also known as eflags */,
+               CS, SS, DS, ES, FS, GS};
+
+static int registers[NUMREGS];
 
 /* The GDB remote protocol transfers values in target byte order.  This means
 we can use the raw memory access routines to access the value buffer.
@@ -87,29 +95,43 @@ Conveniently, these also handle the case where the buffer is mis-aligned.
 #define ldtul_p(addr) ldl_p(addr)
 #endif
 
-/*
 static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
 {
-    return -1;
-}
-*/
+    if(do_kvm_regs_sync)
+    {
+        struct kvm_regs regs;
+        struct kvm_sregs sregs;
 
-/*
-struct kvm_regs {
-	// out (KVM_GET_REGS) / in (KVM_SET_REGS)
-	__u64 rax, rbx, rcx, rdx;
-	__u64 rsi, rdi, rsp, rbp;
-	__u64 r8,  r9,  r10, r11;
-	__u64 r12, r13, r14, r15;
-	__u64 rip, rflags;
-};
-*/
+        if (ioctl(env->vcpu_fd, KVM_GET_REGS, & regs) < 0)
+            die("KVM_GET_REGS failed");
 
-// TODO: Take the read routines defined in gdbstub.c for x86 registers.
-static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
-{
-    //memcpy(mem_buf, env->regs->rax, 8);
-    return -1;
+        if (ioctl(env->vcpu_fd, KVM_GET_SREGS, & sregs) < 0)
+            die("KVM_GET_REGS failed");
+
+        // order found in linux kernel sources : arch/ia32/include/asm/kgdb.h
+        registers[EAX] = (int) regs.rax;
+        registers[ECX] = (int) regs.rcx;
+        registers[EDX] = (int) regs.rdx;
+        registers[EBX] = (int) regs.rbx;
+        registers[ESP] = (int) regs.rsp;
+        registers[EBP] = (int) regs.rbp;
+        registers[ESI] = (int) regs.rsi;
+        registers[EDI] = (int) regs.rdi;
+        registers[PC]  = (int) current_kvm_cpu->gdb_pc; /* The PC Value Received from S/W */
+        registers[PS]  = (int) regs.rflags;
+        registers[CS]  = (int) sregs.cs.selector;
+        registers[SS]  = (int) sregs.ss.selector;
+        registers[DS]  = (int) sregs.ds.selector;
+        registers[ES]  = (int) sregs.es.selector;
+        registers[FS]  = (int) sregs.fs.selector;
+        registers[GS]  = (int) sregs.gs.selector;
+
+        do_kvm_regs_sync = 0; /* Sync-ed !!! */
+    }
+
+    GET_REG32(registers[n]);        /* This returns size as well; uses mem_buf internally */
+
+    return 0;  /* Zero means no register was read */
 }
 
 static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
@@ -117,21 +139,9 @@ static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
     return -1;
 }
 
-static int num_g_regs = NUM_CORE_REGS;
-
-/*
-static int gdb_read_register (CPUState *env, uint8_t *mem_buf, int reg)
-{
-    if (reg < NUM_CORE_REGS)
-        return cpu_gdb_read_register (env, mem_buf, reg);
-
-    return 0;
-}
-*/
-
 static int gdb_read_register (CPUState * current_kvm_cpu, uint8_t * mem_buf, int reg)
 {
-    if (reg < NUM_CORE_REGS)
+    if (reg < NUMREGS)
         return cpu_gdb_read_register (current_kvm_cpu, mem_buf, reg);
 
     return 0;
@@ -139,7 +149,7 @@ static int gdb_read_register (CPUState * current_kvm_cpu, uint8_t * mem_buf, int
 
 static int gdb_write_register (CPUState *env, uint8_t *mem_buf, int reg)
 {
-    if (reg < NUM_CORE_REGS)
+    if (reg < NUMREGS)
         return cpu_gdb_write_register (env, mem_buf, reg);
 
     return 0;
@@ -164,7 +174,6 @@ static inline int tohex(int v)
     else
         return v - 10 + 'a';
 }
-
 
 static void memtohex (char *buf, const uint8_t *mem, int len)
 {
@@ -282,7 +291,7 @@ static int put_packet_binary (struct GDBState *s, const char *buf, int len)
 static int put_packet (struct GDBState *s, const char *buf)
 {
     #ifdef DEBUG_GDB_SRV
-    printf ("response:%s\n", buf);
+    printf ("Response:%s\n", buf);
     #endif
 
     return put_packet_binary (s, buf, strlen(buf));
@@ -301,7 +310,8 @@ static void gdb_srv_accept (struct GDBState *s)
         perror ("accept");
         return;
     }
-    printf ("GDB connected.\n");
+
+    printf ("GDB connected. (%d --> %d)\n", s->fd, fd);
 
     s->fd = fd;
 }
@@ -457,7 +467,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     void                    *hw_addr;           // MMH: This is in the SystemC Address-Space
 
     #ifdef DEBUG_GDB_SRV
-    printf ("command='%s'\n", line_buf);
+    printf ("Command='%s'\n", line_buf);
     #endif
 
     p = line_buf;
@@ -466,7 +476,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     {
     case '?': //reason the target halted
         snprintf (buf, sizeof (buf), "T%02xthread:%x;",
-            GDB_SIGNAL_TRAP, current_kvm_cpu->cpu_id + 1);
+            GDB_SIGNAL_TRAP, (uint32_t) current_kvm_cpu->cpu_id + 1);
         put_packet (s, buf);
         /* Remove all the breakpoints when this query is issued,
          * because gdb is doing and initial connect and the state
@@ -495,7 +505,8 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
 
     case 'g': //read registers
         len = 0;
-        for (addr = 0; addr < num_g_regs; addr++)
+        do_kvm_regs_sync = 1;
+        for (addr = 0; addr < NUMREGS; addr++)
         {
             //reg_size = gdb_read_register (((CPUState **) crt_kvm_instance->m_envs)[s->g_cpu_index],
             //    mem_buf + len, addr);
@@ -511,7 +522,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         len = strlen(p) / 2;
         hextomem ((uint8_t *) registers, p, len);
 
-        for (addr = 0; addr < num_g_regs && len > 0; addr++)
+        for (addr = 0; addr < NUMREGS && len > 0; addr++)
         {
             //reg_size = gdb_write_register (((CPUState **) crt_kvm_instance->m_envs)[s->g_cpu_index],
             //    registers, addr);
@@ -558,8 +569,8 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     case 'm': //read memory
         addr = strtoull (p, (char **) &p, 16);
 
-        //addr = get_phys_addr_gdb (addr);   // MMH: We don't need this as the 
-                                             //target addresses are already in
+        //addr = get_phys_addr_gdb (addr);   // MMH: We don't need this as the
+                                             // target addresses are already in
                                              // target address-space
 
         if (*p == ',')
@@ -639,7 +650,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     case 'Q':
         if (strcmp(p, "C") == 0)
         {
-            sprintf (buf, "QC%x", current_kvm_cpu->cpu_id + 1);
+            sprintf (buf, "QC%x", (uint32_t) current_kvm_cpu->cpu_id + 1);
             put_packet (s, buf);
             break;
         }
@@ -694,17 +705,17 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
                 memtohex (buf, mem_buf, len);
                 put_packet (s, buf);
             }
-            
+
             break;
         }
         goto unknown_command;
 
     case 's': //saddr - step
-        
-        if (*p != '\0') 
+
+        if (*p != '\0')
         {
             addr = strtoull (p, (char **) &p, 16);
-        }        
+        }
         gdb_continue (s, GDB_STATE_STEP);
         break;
 
@@ -767,8 +778,8 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         }
         break;
 
-    case 'Z': //zt,addr,length - add break or watchpoint 
-    case 'z': //zt,addr,length - remove break or watchpoint 
+    case 'Z': //zt,addr,length - add break or watchpoint
+    case 'z': //zt,addr,length - remove break or watchpoint
         type = strtoul (p, (char **) &p, 16);
         if (*p == ',')
             p++;
@@ -826,7 +837,7 @@ static void gdb_read_byte (struct GDBState *s, int ch)
         }
         else
         {
-            if (s->line_buf_index >= sizeof(s->line_buf) - 1)
+            if (((uint32_t) s->line_buf_index) >= sizeof(s->line_buf) - 1)
             {
                 s->state = RS_IDLE;
             }
@@ -864,6 +875,35 @@ static void gdb_read_byte (struct GDBState *s, int ch)
     } //switch
 }
 
+void gdb_verify (target_ulong addr)
+{
+    //update the un-updated registers
+    /*
+    cpu_single_env->rabbits.gdb_pc = addr;
+
+    if (cpu_single_env->rabbits.sw_single_step > 0)
+    {
+        cpu_single_env->rabbits.sw_single_step--;
+        if (cpu_single_env->rabbits.sw_single_step == 0)
+        {
+            cpu_single_env->exception_index = EXCP_BKPT;
+            cpu_single_env->regs[15] = cpu_single_env->rabbits.gdb_pc;
+            cpu_loop_exit (cpu_single_env);
+            return;
+        }
+    }
+
+    crt_kvm_instance->m_counters.no_instructions ++;
+    */
+
+    current_kvm_cpu->gdb_pc = addr;     /* Save the Debug PC for later use */
+
+    if (!gdb_condition (addr))
+        return;
+
+    gdb_loop (-1, 0, 0);
+}
+
 void gdb_loop (int idx_watch, int bwrite, unsigned long new_val)
 {
     char              buf[256], buf1[256];
@@ -897,7 +937,7 @@ void gdb_loop (int idx_watch, int bwrite, unsigned long new_val)
             }
         }
 
-        sprintf (buf1, "thread:%x;", current_kvm_cpu->cpu_id + 1);
+        sprintf (buf1, "thread:%x;", ((uint32_t) current_kvm_cpu->cpu_id) + 1);
         strcat (buf, buf1);
 
         put_packet (s, buf);
@@ -959,8 +999,6 @@ static void close_gdb_sockets (void)
 
 int gdb_srv_start_and_wait (struct kvm *pinstance, int port)
 {
-    //printf("Inside gdb_srv_start_and_wait: KVM Instance = 0x%08X, Port = %d\n", pinstance, port);
-
     pinstance->m_gdb->running_state = GDB_STATE_DETACH;
 
     pinstance->m_gdb->srv_sock_fd = gdb_srv_open (port);
@@ -980,6 +1018,7 @@ int gdb_srv_start_and_wait (struct kvm *pinstance, int port)
     return 0;
 }
 
+/* TODO: Register this handler and interrupt KVM Guest */
 int gdb_start_debug (void)
 {
     int                 idx, bstart = 0;
@@ -1000,11 +1039,11 @@ int gdb_condition (target_ulong addr)
     int                 gdbcpu = crt_kvm_instance->m_gdb->c_cpu_index;
     int                 i, nb;
     unsigned long       *paddr;
-    
+
     if (gdbrs == GDB_STATE_DETACH)
         return 0;
 
-    if (current_kvm_cpu->cpu_id != gdbcpu && gdbcpu != - 1)
+    if ((int) current_kvm_cpu->cpu_id != gdbcpu && gdbcpu != - 1)
         return 0;
 
     if (gdbrs == GDB_STATE_STEP || gdbrs == GDB_STATE_INIT)
@@ -1025,5 +1064,5 @@ void gdb_server_init (struct kvm * pinstance)
     memset (pinstance->m_gdb, 0, sizeof (struct GDBState));
     pinstance->m_gdb->running_state = GDB_STATE_DETACH;
 
-    printf("GDB Server Initialized; KVM Instance = 0x%08X\n", pinstance);
+    printf("GDB Server Initialized; KVM Instance = 0x%08X\n", (uint32_t) pinstance);
 }

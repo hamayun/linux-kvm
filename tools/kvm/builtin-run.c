@@ -891,7 +891,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	symbol__init(vmlinux_filename);
 */
 
-        // Enable this Function to Modify the TTY terminal for Linux.
+    // Enable this Function to Modify the TTY terminal for Linux.
 	//term_init();
 
 	if (!guest_name) {
@@ -900,21 +900,21 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	}
 
 	kvm = kvm__init(dev, ram_size, guest_name);
-        crt_kvm_instance = kvm;
-        if(1)
-        {
-            // Initialize the GDB Server
-            gdb_server_init (kvm);
-        }
+    crt_kvm_instance = kvm;
+    if(1)
+    {
+        // Initialize the GDB Server
+        gdb_server_init (kvm);
+    }
 
-        kvm_userspace_mem_addr = kvm->ram_start;
-        kvm_ram_size = kvm->ram_size;
+    kvm_userspace_mem_addr = kvm->ram_start;
+    kvm_ram_size = kvm->ram_size;
 
-        printf("kvm_userspace_mem_addr = 0x%08x, size = 0x%x\n",
-                (uint32_t) kvm_userspace_mem_addr, (uint32_t) kvm_ram_size);
+    printf("kvm_userspace_mem_addr = 0x%08x, size = 0x%x\n",
+            (uint32_t) kvm_userspace_mem_addr, (uint32_t) kvm_ram_size);
 
-        kvm_register_systemc_mmio_callbacks(kvm);
-        kvm_register_io_callbacks(kvm);
+    kvm_register_systemc_mmio_callbacks(kvm);
+    kvm_register_io_callbacks(kvm);
 
 	//irq__init(kvm);
 
@@ -1004,8 +1004,18 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	kvm->vmlinux		= vmlinux_filename;
 
-        printf("KVM Initialized\n");
-        return (void *) kvm;             // Return KVM Instance Pointer to Caller
+    printf("KVM Initialized\n");
+#if 0
+    {
+        u8 * ptr = kvm->ram_start + 0x100005;
+        // e8 ae ef 00 00
+        printf("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+
+        ptr[0] = 0xcc;
+    }
+#endif
+
+    return (void *) kvm;             // Return KVM Instance Pointer to Caller
 }
 
 int kvm_cmd_run(void)
@@ -1097,6 +1107,8 @@ int kvm_cmd_run(void)
 	thread_pool__init(nr_online_cpus);
 	ioeventfd__start();
         */
+
+    //kvm__dump_mem(kvm, 0x0, 64);
 
 	for (i = 0; i < nrcpus; i++) {
 		if (pthread_create(&kvm_cpus[i]->thread, NULL, kvm_cpu_thread, kvm_cpus[i]) != 0)

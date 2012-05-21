@@ -55,7 +55,7 @@ struct kvm {
 
 	const char		*name;
 
-        struct GDBState         *m_gdb;
+	struct GDBState		*m_gdb;
 };
 
 void kvm__set_dir(const char *fmt, ...);

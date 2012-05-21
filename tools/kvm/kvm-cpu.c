@@ -134,10 +134,10 @@ void kvm_cpu__set_break_point(struct kvm_cpu *vcpu, unsigned long addr)
 {
     	struct kvm * kvm   = vcpu->kvm;		/* parent KVM */
         char * mem_addr = kvm->ram_start + addr;
-        
+
         printf("Set Break Point CPU # %ld, KVM ADDR = 0x%08X\n", vcpu->cpu_id, addr);
         printf("Previous Instr = 0x%02X\n", *mem_addr);
-        
+
         *mem_addr = 0xCC;
 
         return;
@@ -526,8 +526,8 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
         }
 
 
-        //kvm_cpu__set_break_point(cpu, 0x100000);
-        //kvm_cpu__set_break_point(cpu, 0x10c088);
+	//kvm_cpu__set_break_point(cpu, 0x100000);
+	//kvm_cpu__set_break_point(cpu, 0x10c088);
 
 	while (cpu->is_running) {
 		if (cpu->paused) {
@@ -535,13 +535,13 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 			cpu->paused = 0;
 		}
 
-                //if(cpu->cpu_id != 0)
-                //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
+        //if(cpu->cpu_id != 0)
+        //        printf("Calling CPU Run [CPU#%d]\n", cpu->cpu_id);
 
-                kvm_cpu__run(cpu);
+		kvm_cpu__run(cpu);
 
-                // Save the Current CPU Reference for GDB Server
-                current_kvm_cpu = cpu;
+		// Save the Current CPU Reference for GDB Server
+		current_kvm_cpu = cpu;
 
 		switch (cpu->kvm_run->exit_reason)
                 {
