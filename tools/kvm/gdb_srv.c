@@ -51,7 +51,7 @@ extern struct kvm     * crt_kvm_instance;
 extern struct kvm     * kvm_instances[10];
 extern int              no_kvm_instances;
 
-int do_kvm_regs_sync = 0;       /* Flag as to sync KVM (Host vs. Guest Registers Once for Each GDB Read Request) */
+//int do_kvm_regs_sync = 0;       /* Flag as to sync KVM (Host vs. Guest Registers Once for Each GDB Read Request) */
 
 /* Number of registers.  */
 #define NUMREGS	16
@@ -64,7 +64,7 @@ enum regnames {EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
                PS /* also known as eflags */,
                CS, SS, DS, ES, FS, GS};
 
-static int registers[NUMREGS];
+//static int registers[NUMREGS];
 
 /* The GDB remote protocol transfers values in target byte order.  This means
 we can use the raw memory access routines to access the value buffer.
@@ -95,8 +95,50 @@ Conveniently, these also handle the case where the buffer is mis-aligned.
 #define ldtul_p(addr) ldl_p(addr)
 #endif
 
-static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
+static int cpu_gdb_read_register(struct GDBState *s, uint8_t *mem_buf, int n)
 {
+    guest_reg_state_t * regs = (guest_reg_state_t *) s->m_regs_state;
+    uint32_t reg_val = 0x0;
+
+    switch(n)
+    {
+        case EAX:
+            reg_val = regs->eax;                    break;
+        case ECX:
+            reg_val = regs->ecx;                    break;
+        case EDX:
+            reg_val = regs->edx;                    break;
+        case EBX:
+            reg_val = regs->ebx;                    break;
+        case ESP:
+            reg_val = regs->esp;                    break;
+        case EBP:
+            reg_val = regs->ebp;                    break;
+        case ESI:
+            reg_val = regs->esi;                    break;
+        case EDI:
+            reg_val = regs->edi;                    break;
+        case PC:
+            reg_val = regs->eip;                    break;
+        case PS:
+            reg_val = regs->eflags;                 break;
+        case CS:
+            reg_val = regs->cs;                     break;
+        case SS:
+            reg_val = regs->ss;                     break;
+        case DS:
+            reg_val = regs->ds;                     break;
+        case ES:
+            reg_val = regs->es;                     break;
+        case FS:
+            reg_val = regs->fs;                     break;
+        case GS:
+            reg_val = regs->gs;                     break;
+    }
+
+    GET_REG32(reg_val);        /* This returns size as well; uses mem_buf internally */
+
+#if 0
     if(do_kvm_regs_sync)
     {
         struct kvm_regs regs;
@@ -130,27 +172,33 @@ static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
     }
 
     GET_REG32(registers[n]);        /* This returns size as well; uses mem_buf internally */
+#endif
 
     return 0;  /* Zero means no register was read */
 }
 
-static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
+static int cpu_gdb_write_register(struct GDBState *s, uint8_t *mem_buf, int n)
 {
-    return -1;
-}
+    guest_reg_state_t * regs = (guest_reg_state_t *) s->m_regs_state;
+    uint32_t reg_val = 0x0;
 
-static int gdb_read_register (CPUState * current_kvm_cpu, uint8_t * mem_buf, int reg)
-{
-    if (reg < NUMREGS)
-        return cpu_gdb_read_register (current_kvm_cpu, mem_buf, reg);
+    // TODO:
 
     return 0;
 }
 
-static int gdb_write_register (CPUState *env, uint8_t *mem_buf, int reg)
+static int gdb_read_register (struct GDBState *s, uint8_t * mem_buf, int reg)
 {
     if (reg < NUMREGS)
-        return cpu_gdb_write_register (env, mem_buf, reg);
+        return cpu_gdb_read_register (s, mem_buf, reg);
+
+    return 0;
+}
+
+static int gdb_write_register (struct GDBState *s, uint8_t *mem_buf, int reg)
+{
+    if (reg < NUMREGS)
+        return cpu_gdb_write_register (s, mem_buf, reg);
 
     return 0;
 }
@@ -505,12 +553,12 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
 
     case 'g': //read registers
         len = 0;
-        do_kvm_regs_sync = 1;
+        //do_kvm_regs_sync = 1;
         for (addr = 0; addr < NUMREGS; addr++)
         {
             //reg_size = gdb_read_register (((CPUState **) crt_kvm_instance->m_envs)[s->g_cpu_index],
             //    mem_buf + len, addr);
-            reg_size = gdb_read_register (current_kvm_cpu, mem_buf + len, addr);
+            reg_size = gdb_read_register (s, mem_buf + len, addr);
             len += reg_size;
         }
         memtohex (buf, mem_buf, len);
@@ -526,7 +574,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         {
             //reg_size = gdb_write_register (((CPUState **) crt_kvm_instance->m_envs)[s->g_cpu_index],
             //    registers, addr);
-            reg_size = gdb_write_register (current_kvm_cpu, registers, addr);
+            reg_size = gdb_write_register (s, registers, addr);
             len -= reg_size;
             registers += reg_size;
         }
@@ -875,7 +923,7 @@ static void gdb_read_byte (struct GDBState *s, int ch)
     } //switch
 }
 
-void gdb_verify (target_ulong addr)
+void gdb_verify (struct kvm * kvm)
 {
     //update the un-updated registers
     /*
@@ -896,22 +944,20 @@ void gdb_verify (target_ulong addr)
     crt_kvm_instance->m_counters.no_instructions ++;
     */
 
-    current_kvm_cpu->gdb_pc = addr;     /* Save the Debug PC for later use */
+    guest_reg_state_t * regs = (guest_reg_state_t *) kvm->m_gdb->m_regs_state;
 
-    if (!gdb_condition (addr))
+    if (!gdb_condition (regs->eip))
         return;
 
-    gdb_loop (-1, 0, 0);
+    gdb_loop (-1, 0, 0, kvm);
 }
 
-void gdb_loop (int idx_watch, int bwrite, unsigned long new_val)
+void gdb_loop (int idx_watch, int bwrite, unsigned long new_val, struct kvm * kvm)
 {
     char              buf[256], buf1[256];
     int               i, nb;
-    struct GDBState   *s = crt_kvm_instance->m_gdb;
-    //unsigned char     save_b_use_backdoor = current_kvm_cpu->rabbits.b_use_backdoor;
+    struct GDBState   *s = kvm->m_gdb;
 
-    //current_kvm_cpu->rabbits.b_use_backdoor = 1;
     write_watchpoint = 0;
 
     if (s->running_state != GDB_STATE_INIT)
@@ -997,22 +1043,22 @@ static void close_gdb_sockets (void)
     }
 }
 
-int gdb_srv_start_and_wait (struct kvm *pinstance, int port)
+int gdb_srv_start_and_wait (struct kvm *p_kvm, int port)
 {
-    pinstance->m_gdb->running_state = GDB_STATE_DETACH;
+    p_kvm->m_gdb->running_state = GDB_STATE_DETACH;
 
-    pinstance->m_gdb->srv_sock_fd = gdb_srv_open (port);
-    if (pinstance->m_gdb->srv_sock_fd < 0)
+    p_kvm->m_gdb->srv_sock_fd = gdb_srv_open (port);
+    if (p_kvm->m_gdb->srv_sock_fd < 0)
     {
         printf ("Error: Cannot open port %d in %s\n", port, __FUNCTION__);
         return -1;
     }
 
     printf ("Waiting for a GDB connection on port %d (arch=%s) ...\n", port, TARGET_ARCH);
-    gdb_srv_accept (pinstance->m_gdb);
+    gdb_srv_accept (p_kvm->m_gdb);
 
-    pinstance->m_gdb->running_state = GDB_STATE_INIT;
-    pinstance->m_gdb->c_cpu_index = -1;
+    p_kvm->m_gdb->running_state = GDB_STATE_INIT;
+    p_kvm->m_gdb->c_cpu_index = -1;
     atexit (close_gdb_sockets);
 
     return 0;
@@ -1058,11 +1104,11 @@ int gdb_condition (target_ulong addr)
     return 0;
 }
 
-void gdb_server_init (struct kvm * pinstance)
+void gdb_server_init (struct kvm * p_kvm)
 {
-    pinstance->m_gdb = malloc(sizeof (struct GDBState));
-    memset (pinstance->m_gdb, 0, sizeof (struct GDBState));
-    pinstance->m_gdb->running_state = GDB_STATE_DETACH;
+    p_kvm->m_gdb = malloc(sizeof (struct GDBState));
+    memset(p_kvm->m_gdb, 0, sizeof (struct GDBState));
+    p_kvm->m_gdb->running_state = GDB_STATE_DETACH;
 
-    printf("GDB Server Initialized; KVM Instance = 0x%08X\n", (uint32_t) pinstance);
+    printf("GDB Server Initialized; KVM Instance = 0x%08X\n", (uint32_t) p_kvm);
 }

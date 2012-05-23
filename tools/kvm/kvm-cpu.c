@@ -269,6 +269,20 @@ static void print_segment(const char *name, struct kvm_segment *seg, struct kvm_
 		(u8) seg->type, seg->present, seg->dpl, seg->db, seg->s, seg->l, seg->g, seg->avl);
 }
 
+void kvm_cpu__show_eip(struct kvm_cpu *vcpu)
+{
+	struct kvm_regs regs;
+	unsigned long rip;
+
+	if (ioctl(vcpu->vcpu_fd, KVM_GET_REGS, &regs) < 0)
+		die("KVM_GET_REGS failed");
+
+	rip = regs.rip;;
+    printf("rip: %016lx\n", rip);
+
+    return;
+}
+
 void kvm_cpu__show_registers(struct kvm_cpu *vcpu)
 {
 	unsigned long cr0, cr2, cr3;
@@ -296,8 +310,8 @@ void kvm_cpu__show_registers(struct kvm_cpu *vcpu)
 	r10 = regs.r10; r11 = regs.r11; r12 = regs.r12;
 	r13 = regs.r13; r14 = regs.r14; r15 = regs.r15;
 
-        debug_fd = stdout;
-        dprintf(debug_fd, "\n");
+	debug_fd = stdout;
+	dprintf(debug_fd, "\n");
 	dprintf(debug_fd, " Registers:\n");
 	dprintf(debug_fd,   " ----------\n");
 	dprintf(debug_fd, " rip: %016lx   rsp: %016lx flags: %016lx\n", rip, rsp, rflags);
@@ -520,13 +534,13 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 	kvm_cpu__reset_vcpu(cpu);
 
 	if (cpu->kvm->single_step && cpu->cpu_id != 0)
-        {
-		kvm_cpu__enable_singlestep(cpu);
-                printf("KVM Single Stepping Enabled ... [CPU#%d]\n", cpu->cpu_id);
-        }
+    {
+        kvm_cpu__enable_singlestep(cpu);
+        printf("KVM Single Stepping Enabled ... [CPU#%d]\n", cpu->cpu_id);
+    }
 
 
-	//kvm_cpu__set_break_point(cpu, 0x100000);
+    //kvm_cpu__set_break_point(cpu, 0x100000);
 	//kvm_cpu__set_break_point(cpu, 0x10c088);
 
 	while (cpu->is_running) {
@@ -544,18 +558,19 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		current_kvm_cpu = cpu;
 
 		switch (cpu->kvm_run->exit_reason)
-                {
-                    case KVM_EXIT_UNKNOWN:
-                        printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
-                           cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
-                    break;
+        {
+        case KVM_EXIT_UNKNOWN:
+            printf("KVM_EXIT_UNKNOWN [CPU#%d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+                cpu->cpu_id, cpu->kvm_run->hw.hardware_exit_reason, cpu->kvm_run->fail_entry);
+            break;
 		case KVM_EXIT_DEBUG:
-                    //if(cpu->cpu_id != 0)
-                    {
-                         kvm_cpu__show_registers(cpu);
-                         kvm_cpu__show_code(cpu);
-                    }
-                    break;
+            //if(cpu->cpu_id != 0)
+            {
+                kvm_cpu__show_eip(cpu);
+                //kvm_cpu__show_registers(cpu);
+                //kvm_cpu__show_code(cpu);
+            }
+            break;
 		case KVM_EXIT_IO: {
 			bool ret;
 

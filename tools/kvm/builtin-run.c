@@ -904,6 +904,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
     if(1)
     {
         // Initialize the GDB Server
+        // Question: Should we create an instance of GDB Server for Each CPU ?
         gdb_server_init (kvm);
     }
 

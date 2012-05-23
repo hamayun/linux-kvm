@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <time.h>
 #include <signal.h>
+#include <inttypes.h>
 
 #define KVM_NR_CPUS		(255)
 
@@ -57,6 +58,15 @@ struct kvm {
 
 	struct GDBState		*m_gdb;
 };
+
+/* Used for Debugging Only */
+typedef struct guest_reg_state
+{
+   uint32_t ds, es, fs, gs;                             /* Segment selectors */
+   uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;     /* Pushed by pusha. */
+   uint32_t int_no, err_code;                           /* Interrupt number and error code (if applicable) */
+   uint32_t eip, cs, eflags, useresp, ss;               /* Pushed by the processor automatically. */
+} guest_reg_state_t;
 
 void kvm__set_dir(const char *fmt, ...);
 const char *kvm__get_dir(void);

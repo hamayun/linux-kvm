@@ -6,6 +6,7 @@
 #include "kvm/brlock.h"
 #include "kvm/rbtree-interval.h"
 #include "kvm/mutex.h"
+#include "gdb_srv.h"
 
 #include <linux/kvm.h>	/* for KVM_EXIT_* */
 #include <linux/types.h>
@@ -84,15 +85,27 @@ static struct ioport_operations dummy_write_only_ioport_ops = {
 
 extern __thread struct kvm_cpu *current_kvm_cpu;
 
+static void gdbsrv_guest_regs(guest_reg_state_t * regs)
+{
+    printf("  EAX = 0x%08X   EBX = 0x%08X   ECX = 0x%08X   EDX = 0x%08X\n", regs->eax, regs->ebx, regs->ecx, regs->edx);
+    printf("  ESP = 0x%08X   EBP = 0x%08X   ESI = 0x%08X   EDI = 0x%08X\n", regs->esp, regs->ebp, regs->esi, regs->edi);
+    printf("FLAGS = 0x%08X USESP = 0x%08X INT # = 0x%04X       EIP = 0x%08X\n", regs->eflags, regs->useresp, regs->int_no, regs->eip);
+    printf("   CS = 0x%04X        SS = 0x%04X        DS = 0x%04X        ES = 0x%04X\n", regs->cs, regs->ss, regs->ds, regs->es);
+    printf("   FS = 0x%04X        GS = 0x%04X\n", regs->fs, regs->gs);
+
+    return;
+}
+
 static bool gdbsrv_hook_fun(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
 {
-	//u8 * ptr = kvm->ram_start + *((u32 *) data);   /* data is actually the current eip */
+    guest_reg_state_t * regs = (guest_reg_state_t *)(kvm->ram_start + *((u32 *) data));
 
-	printf("GDB Server Hook: Port = %X, Data = %X, Size = %X\n", port, *((u32 *) data), size);
-	//ptr[0] = 0xe8;
-	//printf("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+    printf("GDB Server Hook: Port = %X, Data = %X, Size = %X\n", port, *((u32 *) data), size);
 
-	gdb_verify (*((u32 *) data)); /* data is actually the current eip */
+    gdbsrv_guest_regs(regs);
+
+    kvm->m_gdb->m_regs_state = regs;
+    gdb_verify (kvm);
 
 	return true;
 }
