@@ -3,6 +3,11 @@
 #ifndef _DEFS_IMPORTED_
 #define _DEFS_IMPORTED_
 
+#include <inttypes.h>
+
+// header file taken from qemu-kvm
+#include "qemu-queue.h"
+
 //#define CONFIG_X86_64
 #define TARGET_LONG_ALIGNMENT 4
 
@@ -14,7 +19,6 @@ typedef uint64_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
 typedef uint32_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
 #endif
 
-/*
 #define CPU_NB_REGS64 16
 #define CPU_NB_REGS32 8
 
@@ -24,9 +28,33 @@ typedef uint32_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
 #define CPU_NB_REGS CPU_NB_REGS32
 #endif
 
-#define NUM_CORE_REGS (CPU_NB_REGS * 2 + 25)
-*/
+//#define NUM_CORE_REGS (CPU_NB_REGS * 2 + 25)
+#define NUM_CORE_REGS (CPU_NB_REGS + 8)
 
+/* Breakpoint/watchpoint flags */
+#define BP_MEM_READ           0x01
+#define BP_MEM_WRITE          0x02
+#define BP_MEM_ACCESS         (BP_MEM_READ | BP_MEM_WRITE)
+#define BP_STOP_BEFORE_ACCESS 0x04
+#define BP_WATCHPOINT_HIT     0x08
+#define BP_GDB                0x10
+#define BP_CPU                0x20
+
+struct kvm_sw_breakpoint {
+    target_ulong pc;
+    target_ulong saved_insn;
+    int use_count;
+    QTAILQ_ENTRY(kvm_sw_breakpoint) entry;
+};
+
+typedef struct CPUWatchpoint {
+    target_ulong vaddr;
+    target_ulong len_mask;
+    int flags; /* BP_* */
+    QTAILQ_ENTRY(CPUWatchpoint) entry;
+} CPUWatchpoint;
+
+QTAILQ_HEAD(kvm_sw_breakpoint_head, kvm_sw_breakpoint);
 
 /* Taken From /home/hamayun/workspace/Rabbits-sls/rabbits/qemu/sc_qemu/bswap.h */
 

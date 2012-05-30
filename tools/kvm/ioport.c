@@ -83,6 +83,7 @@ static struct ioport_operations dummy_write_only_ioport_ops = {
 	.io_out		= dummy_io_out,
 };
 
+#if 0
 extern __thread struct kvm_cpu *current_kvm_cpu;
 
 static void gdbsrv_guest_regs(guest_reg_state_t * regs)
@@ -105,7 +106,7 @@ static bool gdbsrv_hook_fun(struct ioport *ioport, struct kvm *kvm, u16 port, vo
     gdbsrv_guest_regs(regs);
 
     kvm->m_gdb->m_regs_state = regs;
-    gdb_verify (kvm);
+    //gdb_verify (kvm);
 
 	return true;
 }
@@ -113,6 +114,7 @@ static bool gdbsrv_hook_fun(struct ioport *ioport, struct kvm *kvm, u16 port, vo
 static struct ioport_operations gdbsrv_hook_ops = {
 	.io_out		= gdbsrv_hook_fun,
 };
+#endif
 
 u16 ioport__register(u16 port, struct ioport_operations *ops, int count, void *param)
 {
@@ -225,6 +227,6 @@ void ioport__setup_legacy(void)
 	ioport__register(0x03D5, &dummy_write_only_ioport_ops, 1, NULL);
 
 	/* Ports to Handle SingleSteps/Breakpoints in S/W */
-	ioport__register(IOPORT_SINGLESTEP, &gdbsrv_hook_ops, 1, NULL);
-	ioport__register(IOPORT_BREAKPOINT, &gdbsrv_hook_ops, 1, NULL);
+	//ioport__register(IOPORT_SINGLESTEP, &gdbsrv_hook_ops, 1, NULL);
+	//ioport__register(IOPORT_BREAKPOINT, &gdbsrv_hook_ops, 1, NULL);
 }

@@ -9,6 +9,7 @@
 #include <time.h>
 #include <signal.h>
 #include <inttypes.h>
+#include <defs_imported.h>
 
 #define KVM_NR_CPUS		(255)
 
@@ -27,46 +28,43 @@
 #define HOME_DIR		getenv("HOME")
 
 struct GDBState;
+struct kvm_cpu;
 
 struct kvm {
-	int			sys_fd;		/* For system ioctls(), i.e. /dev/kvm */
-	int			vm_fd;		/* For VM ioctls() */
-	timer_t			timerid;	/* Posix timer for interrupts */
+    int                           sys_fd;		/* For system ioctls(), i.e. /dev/kvm */
+    int                           vm_fd;		/* For VM ioctls() */
+    timer_t                       timerid;	/* Posix timer for interrupts */
 
-	int			nrcpus;		/* Number of cpus to run */
+    int                           nrcpus;		/* Number of cpus to run */
 
-	u32			mem_slots;	/* for KVM_SET_USER_MEMORY_REGION */
+    u32                           mem_slots;	/* for KVM_SET_USER_MEMORY_REGION */
 
-	u64			ram_size;
-	void			*ram_start;
+    u64                           ram_size;
+    void                         *ram_start;
 
-	bool			nmi_disabled;
+    bool                          nmi_disabled;
 
-	bool			single_step;
+    u16                           boot_selector;
+    u16                           boot_ip;
+    u16                           boot_sp;
 
-	u16			boot_selector;
-	u16			boot_ip;
-	u16			boot_sp;
+    struct interrupt_table        interrupt_table;
 
-	struct interrupt_table	interrupt_table;
+    const char                   *vmlinux;
+    struct disk_image           **disks;
+    int                           nr_disks;
 
-	const char		*vmlinux;
-	struct disk_image       **disks;
-	int                     nr_disks;
+    const char                   *name;
 
-	const char		*name;
+    struct kvm_cpu               *first_cpu;
+    bool                          enable_singlestep;  /* enable single step */
+    int                           robust_singlestep;  /* does kvm support robust single step ? */
+    bool                          enable_debug_mode;
+    int                           debugregs;
 
-	struct GDBState		*m_gdb;
+    struct kvm_sw_breakpoint_head kvm_sw_breakpoints;
+    struct GDBState              *m_gdb;
 };
-
-/* Used for Debugging Only */
-typedef struct guest_reg_state
-{
-   uint32_t ds, es, fs, gs;                             /* Segment selectors */
-   uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;     /* Pushed by pusha. */
-   uint32_t int_no, err_code;                           /* Interrupt number and error code (if applicable) */
-   uint32_t eip, cs, eflags, useresp, ss;               /* Pushed by the processor automatically. */
-} guest_reg_state_t;
 
 void kvm__set_dir(const char *fmt, ...);
 const char *kvm__get_dir(void);

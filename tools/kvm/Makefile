@@ -88,6 +88,7 @@ OBJS	+= hw/i8042.o
 OBJS	+= hw/pci-shmem.o
 OBJS	+= kvm-ipc.o
 OBJS	+= gdb_srv.o
+OBJS	+= gdb_srv_arch.o
 
 FLAGS_BFD := $(CFLAGS) -lbfd
 has_bfd := $(call try-cc,$(SOURCE_BFD),$(FLAGS_BFD))

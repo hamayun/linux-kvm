@@ -424,6 +424,8 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 
 	kvm = kvm__new();
 
+    QTAILQ_INIT(&kvm->kvm_sw_breakpoints);
+
 	kvm->sys_fd = open(kvm_dev, O_RDWR);
 	if (kvm->sys_fd < 0) {
 		if (errno == ENOENT)
@@ -454,6 +456,11 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 	ret = ioctl(kvm->vm_fd, KVM_CREATE_PIT2, &pit_config);
 	if (ret < 0)
 		die_perror("KVM_CREATE_PIT2 ioctl");
+
+    kvm->robust_singlestep = kvm__supports_extension(kvm, KVM_CAP_X86_ROBUST_SINGLESTEP);
+    if(kvm->robust_singlestep) printf("KVM has Robust Single Step\n");
+
+    kvm->debugregs         = kvm__supports_extension(kvm, KVM_CAP_DEBUGREGS);
 
 	kvm->ram_size		= ram_size;
 

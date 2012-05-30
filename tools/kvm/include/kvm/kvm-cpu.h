@@ -4,6 +4,7 @@
 #include <linux/kvm.h>	/* for struct kvm_regs */
 
 #include <pthread.h>
+#include <defs_imported.h>
 
 struct kvm;
 
@@ -26,13 +27,46 @@ struct kvm_cpu {
 	u8			paused;
 
 	struct kvm_coalesced_mmio_ring	*ring;
+
+    CPUWatchpoint * watchpoint_hit;
+
+    /* For KVM */
+//    uint32_t mp_state;
+    int32_t exception_injected;
+/*
+    int32_t interrupt_injected;
+    uint8_t soft_interrupt;
+*/
+    uint8_t has_error_code;
+/*
+    uint32_t sipi_vector;
+    uint32_t cpuid_kvm_features;
+    uint32_t cpuid_svm_features;
+    bool tsc_valid;
+    int tsc_khz;
+ */
+    int kvm_vcpu_dirty;
+
+    /* exception/interrupt handling */
+    //int error_code;
+    //int exception_is_int;
+    //target_ulong exception_next_eip;
+    target_ulong dr[8]; /* debug registers */
+    /*
+    union {
+        CPUBreakpoint *cpu_breakpoint[4];
+        CPUWatchpoint *cpu_watchpoint[4];
+    };*/ /* break/watchpoints for dr[0..3] */
+
+    struct kvm_cpu *next_cpu;
 };
+
+typedef struct kvm_cpu CPUState;
 
 struct kvm_cpu *kvm_cpu__init(struct kvm *kvm, unsigned long cpu_id);
 void kvm_cpu__delete(struct kvm_cpu *vcpu);
 void kvm_cpu__reset_vcpu(struct kvm_cpu *vcpu);
 void kvm_cpu__setup_cpuid(struct kvm_cpu *vcpu);
-void kvm_cpu__enable_singlestep(struct kvm_cpu *vcpu);
 void kvm_cpu__run(struct kvm_cpu *vcpu);
 void kvm_cpu__reboot(void);
 int kvm_cpu__start(struct kvm_cpu *cpu);

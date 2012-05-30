@@ -89,11 +89,11 @@ static const char *image_filename[MAX_DISK_IMAGES];
 static const char *console;
 static const char *dev;
 static const char *network;
-static const char *host_ip;
-static const char *guest_ip;
-static const char *guest_mac;
-static const char *host_mac;
-static const char *script;
+//static const char *host_ip;
+//static const char *guest_ip;
+//static const char *guest_mac;
+//static const char *host_mac;
+//static const char *script;
 static const char *guest_name;
 static struct virtio_net_params *net_params;
 static bool single_step;
@@ -797,10 +797,10 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	int max_cpus, recommended_cpus;
 	int i;
 
-        for (i = 0; i < argc; i++)
-        {
-            printf("argv[%d] = %s\n", i, argv[i]);
-        }
+    for (i = 0; i < argc; i++)
+    {
+        printf("argv[%d] = %s\n", i, argv[i]);
+    }
 
 	// Fill in the function table for SystemC (Called by Platform or Components)
 	ki->gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
@@ -822,7 +822,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 				fprintf(stderr, "Cannot handle parameter: "
 						"%s\n", argv[0]);
 				usage_with_options(run_usage, options);
-				return EINVAL;
+				return ((void *) EINVAL);
 			}
 			/* first unhandled parameter is treated as a kernel
 			   image
@@ -839,7 +839,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	if (!kernel_filename) {
 		kernel_usage_with_options();
-		return EINVAL;
+		return ((void *) EINVAL);
 	}
 
 	vmlinux_filename = find_vmlinux();
@@ -901,26 +901,29 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	kvm = kvm__init(dev, ram_size, guest_name);
     crt_kvm_instance = kvm;
+
     if(1)
     {
-        // Initialize the GDB Server
-        // Question: Should we create an instance of GDB Server for Each CPU ?
+        kvm->enable_debug_mode = true;
+        // We force single stepping for first instruction only; afterwards we disable it.
+        kvm->enable_singlestep = true;
         gdb_server_init (kvm);
     }
+    else
+    {
+        // single stepping mode without gdb support.
+        kvm->enable_singlestep = single_step;
+        kvm->enable_debug_mode = false;
+    }
+
 
     kvm_userspace_mem_addr = kvm->ram_start;
     kvm_ram_size = kvm->ram_size;
-
-    printf("kvm_userspace_mem_addr = 0x%08x, size = 0x%x\n",
-            (uint32_t) kvm_userspace_mem_addr, (uint32_t) kvm_ram_size);
 
     kvm_register_systemc_mmio_callbacks(kvm);
     kvm_register_io_callbacks(kvm);
 
 	//irq__init(kvm);
-
-	kvm->single_step = single_step;
-
 	//ioeventfd__init();
 
 	max_cpus = kvm__max_cpus(kvm);
@@ -1021,10 +1024,10 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 int kvm_cmd_run(void)
 {
-        int i;
-	struct framebuffer *fb = NULL;
-        int exit_code = 0;
-        void *ret;
+    int i;
+    //	struct framebuffer *fb = NULL;
+    int exit_code = 0;
+    void *ret;
 
 	ioport__setup_legacy();
 
@@ -1081,6 +1084,13 @@ int kvm_cmd_run(void)
 		kvm_cpus[i] = kvm_cpu__init(kvm, i);
 		if (!kvm_cpus[i])
 			die("unable to initialize KVM VCPU");
+
+        if(i == 0)
+            kvm->first_cpu = kvm_cpus[i];
+        else
+            kvm_cpus[i-1]->next_cpu = kvm_cpus[i];
+
+        kvm_cpus[i]->next_cpu = NULL;
 	}
 
 	kvm__init_ram(kvm);
