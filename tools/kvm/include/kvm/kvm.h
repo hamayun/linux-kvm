@@ -57,8 +57,8 @@ struct kvm {
     const char                   *name;
 
     struct kvm_cpu               *first_cpu;
-    bool                          enable_singlestep;  /* enable single step */
-    int                           robust_singlestep;  /* does kvm support robust single step ? */
+    int                           sw_single_step;     /* how many instructions to single step ? */
+    int                           robust_singlestep;  /* does kvm support robust single step ? for info only */
     bool                          enable_debug_mode;
     int                           debugregs;
 

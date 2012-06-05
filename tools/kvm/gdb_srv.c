@@ -1,22 +1,22 @@
 /*
- * gdb server stub
- *
  * Copyright (c) 2003-2005 Fabrice Bellard
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * Modified for KVM based Native Simulation by Mian M. Hamayun
+ * Copyright (C) 2012 TIMA Laboratory
  *
- * This library is distributed in the hope that it will be useful,
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,16 +38,14 @@
 #include "gdb_srv.h"
 #include "gdb_srv_arch.h"
 
-#define DEBUG_GDB_SRV
-
-#define TARGET_ARCH "x86"
-extern __thread struct kvm_cpu *current_kvm_cpu;
-
-static inline int target_memory_rw_debug(CPUState *env, target_ulong addr,
-                                         uint8_t *buf, int len, int is_write)
+const char * gdb_state_str[] =
 {
-    return kvm_arch_memory_rw_debug(env, addr, buf, len, is_write);
-}
+    "GDB_STATE_CONTROL",
+    "GDB_STATE_STEP",
+    "GDB_STATE_CONTINUE",
+    "GDB_STATE_DETACH",
+    "GDB_STATE_INIT",
+};
 
 enum {
     GDB_SIGNAL_0 = 0,
@@ -85,16 +83,8 @@ enum RSState {
     RS_CHKSUM2
 };
 
-/* By default use no IRQs and no timers while single stepping so as to
- * make single stepping like an ICE HW step.
- */
-static int sstep_flags = SSTEP_ENABLE|SSTEP_NOIRQ|SSTEP_NOTIMER;
-
-//static int              one_cpu = 0;
-//static int              saved_c_cpu_index = 0;
-//static int              write_watchpoint = 0;
-//static unsigned long    watchpoint_new_value = 0;
-//static unsigned long    watchpoint_address = 0;
+static int                one_cpu = 0;
+static CPUState *         saved_c_cpu = NULL;
 
 extern struct kvm     * kvm_instances[10];
 extern int              no_kvm_instances;
@@ -243,10 +233,7 @@ static int put_packet_binary(GDBState *s, const char *buf, int len)
 /* return -1 if error, 0 if OK */
 static int put_packet(GDBState *s, const char *buf)
 {
-    #ifdef DEBUG_GDB_SRV
-    printf("reply='%s'\n", buf);
-    #endif
-
+    DPRINTF("Reply='%s'\n", buf);
     return put_packet_binary (s, buf, strlen(buf));
 }
 
@@ -298,10 +285,9 @@ static const int gpr_map32[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 #define IDX_MXCSR_REG   (IDX_XMM_REGS + CPU_NB_REGS)
 
 #if 1
-
 static int num_g_regs = NUM_CORE_REGS;
 
-static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
+static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
 {
     struct kvm_regs  *regs = &env->regs;
     struct kvm_sregs *sregs = &env->sregs;
@@ -326,7 +312,7 @@ static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
         case  FS: reg_val = (uint32_t) sregs->fs.selector;  break;
         case  GS: reg_val = (uint32_t) sregs->gs.selector;  break;
         default:
-            printf("Error: Unknown Registers\n");
+            EPRINTF("Error: Unknown Registers\n");
             return (-1);
     }
 
@@ -335,29 +321,47 @@ static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
     return 0;  /* Zero means no register was read */
 }
 
-static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
+static int gdb_write_register(CPUState *env, uint8_t *mem_buf, int reg)
 {
-    // TODO:
-    return 0;
+
+    printf("gdb_write_register\n");
+    while(1);
+/*
+    struct kvm_regs  *regs = &env->regs;
+    struct kvm_sregs *sregs = &env->sregs;
+
+    uint32_t reg_val = 0;
+
+    switch(n)
+    {
+        case EAX: reg_val = (uint32_t) regs->rax;           break;
+        case ECX: reg_val = (uint32_t) regs->rcx;           break;
+        case EDX: reg_val = (uint32_t) regs->rdx;           break;
+        case EBX: reg_val = (uint32_t) regs->rbx;           break;
+        case ESP: reg_val = (uint32_t) regs->rsp;           break;
+        case EBP: reg_val = (uint32_t) regs->rbp;           break;
+        case ESI: reg_val = (uint32_t) regs->rsi;           break;
+        case EDI: reg_val = (uint32_t) regs->rdi;           break;
+        case  PC: reg_val = (uint32_t) regs->rip;           break;
+        case  PS: reg_val = (uint32_t) regs->rflags;        break;
+        case  CS: reg_val = (uint32_t) sregs->cs.selector;  break;
+        case  SS: reg_val = (uint32_t) sregs->ss.selector;  break;
+        case  DS: reg_val = (uint32_t) sregs->ds.selector;  break;
+        case  ES: reg_val = (uint32_t) sregs->es.selector;  break;
+        case  FS: reg_val = (uint32_t) sregs->fs.selector;  break;
+        case  GS: reg_val = (uint32_t) sregs->gs.selector;  break;
+        default:
+            EPRINTF("Error: Unknown Registers\n");
+            return (-1);
+    }
+
+    GET_REG32(reg_val);
+*/
+    return 0;  /* Zero means no register was written */
 }
 
-static int gdb_read_register (CPUState *env, uint8_t * mem_buf, int reg)
-{
-    //if (reg < NUMREGS)
-        return cpu_gdb_read_register (env, mem_buf, reg);
-
-    return 0;
-}
-
-static int gdb_write_register (CPUState *env, uint8_t *mem_buf, int reg)
-{
-    //if (reg < NUMREGS)
-        return cpu_gdb_write_register (env, mem_buf, reg);
-
-    return 0;
-}
 #else
-static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
+static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
 {
     if (n < CPU_NB_REGS) {
         if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
@@ -582,9 +586,8 @@ static void gdb_srv_accept (struct GDBState *s)
         return;
     }
 
-    printf ("GDB connected. (%d --> %d)\n", s->fd, fd);
-
     s->fd = fd;
+    DPRINTF("Connected on File Descriptor = %d\n", s->fd);
 }
 
 static int gdb_srv_open (int port)
@@ -623,13 +626,6 @@ static int gdb_srv_open (int port)
     return fd;
 }
 
-/*
-static int cpu_is_stopped(CPUState *env)
-{
-    return (!env->is_running);
-}
-*/
-
 struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ulong pc)
 {
     struct kvm_sw_breakpoint *bp;
@@ -653,48 +649,37 @@ struct kvm_set_guest_debug_data {
     int err;
 };
 
-/*
-static void kvm_invoke_set_guest_debug(void *data)
-{
-    struct kvm_set_guest_debug_data *dbg_data = data;
-    CPUState *env = dbg_data->env;
-
-    dbg_data->err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &dbg_data->dbg);
-}*/
-
 int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
 {
     struct kvm_set_guest_debug_data data;
 
     data.dbg.control = reinject_trap;
 
-    if (env->kvm->enable_singlestep) {
+    if (env->kvm->sw_single_step > 0) {
         data.dbg.control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
     }
 
     kvm_arch_update_guest_debug(env, &data.dbg);
-    data.env = env;
-
-    //run_on_cpu(env, kvm_invoke_set_guest_debug, &data);
 
     data.err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &data.dbg);
-
     return data.err;
 }
 
 /* enable or disable single step mode. EXCP_DEBUG is returned by the
    CPU loop after each instruction */
-static void cpu_single_step(CPUState *env, int enabled)
+static void cpu_single_step(CPUState *env, int num_steps)
 {
-    if (env->kvm->enable_singlestep != enabled)
+    DPRINTF("cpu_single_step (count = %d)\n", num_steps);
+    env->kvm->sw_single_step = num_steps;
+    if (env->kvm->sw_single_step > 0)
     {
-        env->kvm->enable_singlestep = enabled;
         kvm_update_guest_debug(env, 0);
     }
 }
 
-static void gdb_continue (struct GDBState *s, int running_state)
+static void gdb_srv_set_state (struct GDBState *s, int running_state)
 {
+    DPRINTF ("******* %s: Setting GDB State = %s]\n", __func__, gdb_state_str[running_state]);
     s->running_state = running_state;
 }
 
@@ -702,12 +687,15 @@ static CPUState *find_cpu(struct GDBState *s, int thread_id)
 {
     CPUState *env;
 
+    DPRINTF("find_cpu (thread_id = %d)\n", thread_id);
+
     for (env = s->p_kvm->first_cpu; env != NULL; env = env->next_cpu) {
         if (gdb_id(env) == thread_id) {
             return env;
         }
     }
 
+    DPRINTF("find_cpu (thread_id = %d); Returning NULL\n", thread_id);
     return NULL;
 }
 
@@ -721,9 +709,8 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     uint8_t                 *registers;
     int                     addr;
 
-    #ifdef DEBUG_GDB_SRV
-    printf("command='%s'\n", line_buf);
-    #endif
+    printf("--------------------------------------------------------------------\n");
+    DPRINTF("command='%s'\n", line_buf);
 
     p = line_buf;
     ch = *p++;
@@ -749,7 +736,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
             gdb_set_cpu_pc(s, addr);
         }
         s->signal = 0;
-        gdb_continue (s, GDB_STATE_CONTINUE);
+        gdb_srv_set_state (s, GDB_STATE_CONTINUE);
 	    return RS_IDLE;
 
     // Csig;addr - continue with signal
@@ -757,69 +744,10 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         s->signal = gdb_signal_to_target (strtoul(p, (char **)&p, 16));
         if (s->signal == -1)
             s->signal = 0;
-        gdb_continue (s, GDB_STATE_CONTINUE);
+        gdb_srv_set_state (s, GDB_STATE_CONTINUE);
         return RS_IDLE;
 
     case 'v':
-       if (strncmp(p, "Cont", 4) == 0) {
-            int res_signal, res_thread;
-
-            p += 4;
-            if (*p == '?') {
-                put_packet(s, "vCont;c;C;s;S");
-                break;
-            }
-            res = 0;
-            res_signal = 0;
-            res_thread = 0;
-            while (*p) {
-                int action, signal;
-
-                if (*p++ != ';') {
-                    res = 0;
-                    break;
-                }
-                action = *p++;
-                signal = 0;
-                if (action == 'C' || action == 'S') {
-                    signal = strtoul(p, (char **)&p, 16);
-                } else if (action != 'c' && action != 's') {
-                    res = 0;
-                    break;
-                }
-                thread = 0;
-                if (*p == ':') {
-                    thread = strtoull(p+1, (char **)&p, 16);
-                }
-                action = tolower(action);
-                if (res == 0 || (res == 'c' && action == 's')) {
-                    res = action;
-                    res_signal = signal;
-                    res_thread = thread;
-                }
-            }
-            if (res) {
-                if (res_thread != -1 && res_thread != 0) {
-                    env = find_cpu(s, res_thread);
-                    if (env == NULL) {
-                        put_packet(s, "E22");
-                        break;
-                    }
-                    s->c_cpu = env;
-                }
-                if (res == 's') {
-                    cpu_single_step(s->c_cpu, sstep_flags);
-                }
-                s->signal = res_signal;
-                gdb_continue(s, GDB_STATE_STEP);
-                return RS_IDLE;
-            }
-            break;
-        } else {
-            goto unknown_command;
-        }
-
-/*
         if (strncmp(p, "Cont", 4) == 0) {
             p += 4;
             if (!strcmp (p, "?"))
@@ -831,45 +759,40 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
                     p++;
                     if (*p == ':'){
                         one_cpu = 1;
-                        saved_c_cpu_index = s->c_cpu_index;
-                        thread = strtoull (p + 1, (char **) &p, 16) - 1;
-                        s->c_cpu_index = thread;
+                        saved_c_cpu = s->c_cpu;
+                        thread = strtoull (p + 1, (char **) &p, 16);
+                        s->c_cpu = find_cpu(s, thread);
                     }
 
-                    gdb_continue (s, GDB_STATE_CONTINUE);
+                    gdb_srv_set_state (s, GDB_STATE_CONTINUE);
                 } else if (*p == 's') {
                     p++;
                     if (*p == ':') {
-                        if (write_watchpoint == 1)
-                        {
-                            put_packet (s, "S05");
-                            break;
-                        } else {
-                            one_cpu = 1;
-                            saved_c_cpu_index = s->c_cpu_index;
-                            thread = strtoull (p + 1, (char **) &p, 16) - 1;
-                            s->c_cpu_index = thread;
-                        }
+                        one_cpu = 1;
+                        saved_c_cpu = s->c_cpu;
+                        thread = strtoull (p + 1, (char **) &p, 16);
+                        s->c_cpu = find_cpu(s, thread);
                     }
 
-                    gdb_continue (s, GDB_STATE_STEP);
+                    cpu_single_step(s->c_cpu, 1);
+                    gdb_srv_set_state (s, GDB_STATE_STEP);
                 } else {
                     goto unknown_command;
                 }
             }
         }
         break;
-*/
+
     case 'k':
         /* Kill the target */
-        fprintf(stderr, "\nKVM: Terminated via GDBstub\n");
+        fprintf(stderr, "\nKVM: Terminated via Remote GDB\n");
         exit(0);
 
     //D - detach
     case 'D':
         /* Detach packet */
         gdb_breakpoint_remove_all (s->c_cpu);
-        gdb_continue (s, GDB_STATE_DETACH);
+        gdb_srv_set_state (s, GDB_STATE_DETACH);
         put_packet(s, "OK");
         break;
 
@@ -879,9 +802,9 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
             addr = strtoull(p, (char **)&p, 16);
             gdb_set_cpu_pc(s, addr);
         }
-        cpu_single_step(s->c_cpu, sstep_flags);
-        gdb_continue (s, GDB_STATE_STEP);
-	return RS_IDLE;
+        cpu_single_step(s->c_cpu, 1);
+        gdb_srv_set_state (s, GDB_STATE_STEP);
+        return RS_IDLE;
 
     //read registers
     case 'g':
@@ -917,7 +840,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         if (*p == ',')
             p++;
         len = strtoull(p, NULL, 16);
-        if (target_memory_rw_debug(s->g_cpu, addr, mem_buf, len, 0) != 0) {
+        if (kvm_arch_memory_rw_debug(s->g_cpu, addr, mem_buf, len, 0) != 0) {
             put_packet (s, "E14");
         } else {
             memtohex(buf, mem_buf, len);
@@ -934,7 +857,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         if (*p == ':')
             p++;
         hextomem(mem_buf, p, len);
-        if (target_memory_rw_debug(s->g_cpu, addr, mem_buf, len, 1) != 0) {
+        if (kvm_arch_memory_rw_debug(s->g_cpu, addr, mem_buf, len, 1) != 0) {
             put_packet(s, "E14");
         } else {
             put_packet(s, "OK");
@@ -996,8 +919,10 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     case 'H':
         type = *p++;
         thread = strtoull(p, (char **)&p, 16);
-        printf("GDB Set Thread ... %d\n", thread);
         if (thread == -1 || thread == 0) {
+            DPRINTF("Set Thread ... %d\n", thread);
+            if (type == 'c')
+                s->c_cpu = NULL;
             put_packet(s, "OK");
             break;
         }
@@ -1008,10 +933,12 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         }
         switch (type) {
         case 'c':
+            DPRINTF("Set Thread ... %d, type 'c'\n", thread);
             s->c_cpu = env;
             put_packet(s, "OK");
             break;
         case 'g':
+            DPRINTF("Set Thread ... %d, type 'g'\n", thread);
             s->g_cpu = env;
             put_packet(s, "OK");
             break;
@@ -1135,9 +1062,7 @@ static void gdb_read_byte(GDBState *s, int ch)
     }
 }
 
-#if 1
-//static void gdb_loop(int idx_watch, int bwrite, unsigned long new_val)
-void gdb_handle_debug(CPUState * env)
+static void gdb_loop(CPUState * env)
 {
     char              buf[256], buf1[256];
     int               i, nb;
@@ -1148,18 +1073,31 @@ void gdb_handle_debug(CPUState * env)
         sprintf (buf, "T%02x", TARGET_SIGTRAP);
         sprintf (buf1, "thread:%x;", ((uint32_t) env->cpu_id) + 1);
         strcat (buf, buf1);
+        DPRINTF ("%s: buf = %s [CPU # %d, State = %s]\n", __func__,
+                 buf, (uint32_t) env->cpu_id, gdb_state_str[s->running_state]);
         put_packet (s, buf);
     }
 
     if (s->running_state == GDB_STATE_DETACH)
     {
+        DPRINTF ("%s: [CPU # %d, State = %s]\n", __func__,
+                (uint32_t) env->cpu_id, gdb_state_str[s->running_state]);
         return;
     }
 
+    if (one_cpu)
+    {
+        one_cpu = 0;
+        s->c_cpu = saved_c_cpu;
+    }
+
     s->g_cpu = env;
-    s->c_cpu = env;
+    s->c_cpu = env;     // Should we do it ?
     s->state = RS_IDLE;
     s->running_state = GDB_STATE_CONTROL;
+
+    DPRINTF ("%s: [CPU # %d, State = %s]\n", __func__,
+             (uint32_t) env->cpu_id, gdb_state_str[s->running_state]);
 
     while (s->running_state == GDB_STATE_CONTROL)
     {
@@ -1178,18 +1116,46 @@ void gdb_handle_debug(CPUState * env)
         }
     }
 }
-#endif
 
-/*
-void gdb_srv_handle_debug(struct kvm_cpu * p_kvm_cpu)
+int gdb_condition (CPUState * env)
 {
-    if (!gdb_condition (p_kvm_cpu))
-        return;
+    struct GDBState    *s     = env->kvm->m_gdb;
 
-//    gdb_loop (-1, 0, 0, p_kvm_cpu);
+    if (s->running_state == GDB_STATE_DETACH)
+    {
+        DPRINTF ("%s: GDB_STATE_DETACH Returning 0\n", __func__);
+        return 0;
+    }
+
+    if (env != s->c_cpu && s->c_cpu != NULL)
+    {
+        DPRINTF ("%s: (env != s->c_cpu && s->c_cpu != NULL) Returning 0\n", __func__);
+        return 0;
+    }
+
+    if ((s->running_state == GDB_STATE_STEP) || (s->running_state == GDB_STATE_INIT))
+    {
+        DPRINTF ("%s: %s Returning 1\n", __func__, gdb_state_str[s->running_state]);
+        return 1;
+    }
+
+    return 1;
+}
+
+void gdb_srv_handle_debug(CPUState * env)
+{
+    struct GDBState *s = env->kvm->m_gdb;
+    s->c_cpu = env;
+    s->g_cpu = env;
+
+    if (!gdb_condition (env)){
+        DPRINTF ("%s: gdb_condition failed [CPU # %d]\n", __func__, (uint32_t) env->cpu_id);
+        return;
+    }
+
+    gdb_loop (env);
     return;
 }
-*/
 
 static void close_gdb_sockets (void)
 {
@@ -1218,11 +1184,11 @@ int gdb_srv_start_and_wait (struct kvm *p_kvm, int port)
     s->srv_sock_fd = gdb_srv_open (port);
     if (s->srv_sock_fd < 0)
     {
-        printf ("Error: Cannot open port %d in %s\n", port, __FUNCTION__);
+        EPRINTF ("Error: Cannot open port %d in %s\n", port, __FUNCTION__);
         return -1;
     }
 
-    printf ("Waiting for a GDB connection on port %d (arch=%s) ...\n", port, TARGET_ARCH);
+    printf("Waiting for a GDB connection on port %d ...\n", port);
     gdb_srv_accept (s);
 
     s->running_state = GDB_STATE_INIT;
@@ -1255,7 +1221,7 @@ int gdb_server_init (struct kvm * p_kvm)
     struct GDBState *s = malloc(sizeof (struct GDBState));
     if(!s)
     {
-        printf("Unable to Allocate Memory for GDB Server\n");
+        EPRINTF("Unable to Allocate Memory for GDB Server\n");
         return(-1);
     }
 
@@ -1265,6 +1231,6 @@ int gdb_server_init (struct kvm * p_kvm)
     p_kvm->m_gdb = s;
     s->p_kvm = p_kvm;
 
-    printf("GDB Server Initialized; KVM Instance = 0x%08X\n", (uint32_t) p_kvm);
+    DPRINTF ("GDB Server Initialized; KVM Instance = 0x%08X\n", (uint32_t) p_kvm);
     return 0;
 }

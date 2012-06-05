@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include "gdb_srv.h"
 #include "gdb_srv_arch.h"
 
 #define PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
@@ -122,6 +123,7 @@ struct kvm_cpu *kvm_cpu__init(struct kvm *kvm, unsigned long cpu_id)
 	return vcpu;
 }
 
+/*
 static void kvm_cpu__enable_singlestep(struct kvm_cpu *vcpu)
 {
 	struct kvm_guest_debug debug = {
@@ -131,6 +133,7 @@ static void kvm_cpu__enable_singlestep(struct kvm_cpu *vcpu)
 	if (ioctl(vcpu->vcpu_fd, KVM_SET_GUEST_DEBUG, &debug) < 0)
 		pr_warning("KVM_SET_GUEST_DEBUG failed");
 }
+*/
 
 static struct kvm_msrs *kvm_msrs__new(size_t nmsrs)
 {
@@ -517,15 +520,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 	kvm_cpu__setup_cpuid(cpu);
 	kvm_cpu__reset_vcpu(cpu);
 
-	if (cpu->kvm->enable_singlestep && cpu->cpu_id != 0)
+    if ((cpu->kvm->sw_single_step > 0))
     {
-        kvm_cpu__enable_singlestep(cpu);
-        printf("KVM Single Stepping Enabled ... [CPU # %ld]\n", cpu->cpu_id);
-    }
-
-    if(cpu->kvm->enable_debug_mode){
-        kvm_arch_enable_sw_breakpoints(cpu);
-        printf("KVM Debug Mode is Enabled ... [CPU # %ld]\n", cpu->cpu_id);
+        kvm_update_guest_debug(cpu, 0);
     }
 
     while (cpu->is_running) {
@@ -544,12 +541,11 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		switch (cpu->kvm_run->exit_reason)
         {
         case KVM_EXIT_UNKNOWN:
-//            printf("KVM_EXIT_UNKNOWN [CPU # %ld]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
-//                cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), (unsigned int)(cpu->kvm_run->fail_entry));
+            //printf("KVM_EXIT_UNKNOWN [CPU # %ld]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+            //        cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), (unsigned int)(cpu->kvm_run->fail_entry));
             break;
 		case KVM_EXIT_DEBUG:
             kvm_handle_debug(cpu);
-            //kvm_cpu__show_eip(cpu);
             //kvm_cpu__show_registers(cpu);
             //kvm_cpu__show_code(cpu);
             break;
@@ -579,9 +575,6 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
                             printf("DEBUG_MMIO: Data = 0x%08X, Length = %d\n",
                                     (unsigned int) cpu->kvm_run->mmio.data,
                                     cpu->kvm_run->mmio.len);
-
-                            kvm_cpu__enable_singlestep(cpu);
-                            ret = 1;
                         }
                         else
                         {

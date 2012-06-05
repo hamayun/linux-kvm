@@ -902,17 +902,18 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	kvm = kvm__init(dev, ram_size, guest_name);
     crt_kvm_instance = kvm;
 
+    // TODO: Add a global flag here.
     if(1)
     {
         kvm->enable_debug_mode = true;
         // We force single stepping for first instruction only; afterwards we disable it.
-        kvm->enable_singlestep = true;
+        kvm->sw_single_step = 1;        // Single step for one instruction
         gdb_server_init (kvm);
     }
     else
     {
         // single stepping mode without gdb support.
-        kvm->enable_singlestep = single_step;
+        kvm->sw_single_step = 0;
         kvm->enable_debug_mode = false;
     }
 
