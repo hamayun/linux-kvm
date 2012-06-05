@@ -64,7 +64,6 @@ typedef struct GDBState {
 int gdb_server_init (struct kvm * p_kvm);
 int gdb_srv_start_and_wait (struct kvm *pinstance, int port);
 void gdb_srv_handle_debug(CPUState * env);
-int gdb_condition (struct kvm_cpu * p_kvm_cpu);
 int gdb_start_debug (void);
 
 struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ulong pc);

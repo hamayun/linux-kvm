@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <assert.h>
 
 #include "include/kvm/kvm.h"
 #include "include/kvm/kvm-cpu.h"
@@ -719,14 +720,13 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     //reason the target halted
     case '?':
         /* TODO: Make this return the correct value for user-mode.  */
-        snprintf(buf, sizeof(buf), "T%02xthread:%02x;", GDB_SIGNAL_TRAP,
-                 gdb_id(s->c_cpu));
+        snprintf(buf, sizeof(buf), "T%02xthread:%02x;", GDB_SIGNAL_TRAP, gdb_id(s->g_cpu));
         put_packet(s, buf);
         /* Remove all the breakpoints when this query is issued,
          * because gdb is doing and initial connect and the state
          * should be cleaned up.
          */
-        gdb_breakpoint_remove_all (s->c_cpu);
+        gdb_breakpoint_remove_all (s->g_cpu);
         break;
 
     //caddr - continue
@@ -762,6 +762,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
                         saved_c_cpu = s->c_cpu;
                         thread = strtoull (p + 1, (char **) &p, 16);
                         s->c_cpu = find_cpu(s, thread);
+                        assert(s->c_cpu != NULL);
                     }
 
                     gdb_srv_set_state (s, GDB_STATE_CONTINUE);
@@ -772,6 +773,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
                         saved_c_cpu = s->c_cpu;
                         thread = strtoull (p + 1, (char **) &p, 16);
                         s->c_cpu = find_cpu(s, thread);
+                        assert(s->c_cpu != NULL);
                     }
 
                     cpu_single_step(s->c_cpu, 1);
@@ -791,7 +793,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     //D - detach
     case 'D':
         /* Detach packet */
-        gdb_breakpoint_remove_all (s->c_cpu);
+        gdb_breakpoint_remove_all (s->g_cpu);
         gdb_srv_set_state (s, GDB_STATE_DETACH);
         put_packet(s, "OK");
         break;
@@ -808,11 +810,11 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
 
     //read registers
     case 'g':
-        cpu_synchronize_state(s->g_cpu);
         env = s->g_cpu;
+        cpu_synchronize_state(env);
         len = 0;
         for (addr = 0; addr < num_g_regs; addr++) {
-            reg_size = gdb_read_register(s->g_cpu, mem_buf + len, addr);
+            reg_size = gdb_read_register(env, mem_buf + len, addr);
             len += reg_size;
         }
         memtohex(buf, mem_buf, len);
@@ -821,13 +823,13 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
 
     //GXX... - write regs
     case 'G':
-        cpu_synchronize_state(s->g_cpu);
         env = s->g_cpu;
+        cpu_synchronize_state(env);
         registers = mem_buf;
         len = strlen(p) / 2;
         hextomem((uint8_t *)registers, p, len);
         for (addr = 0; addr < num_g_regs && len > 0; addr++) {
-            reg_size = gdb_write_register(s->g_cpu, registers, addr);
+            reg_size = gdb_write_register(env, registers, addr);
             len -= reg_size;
             registers += reg_size;
         }
@@ -1092,7 +1094,6 @@ static void gdb_loop(CPUState * env)
     }
 
     s->g_cpu = env;
-    s->c_cpu = env;     // Should we do it ?
     s->state = RS_IDLE;
     s->running_state = GDB_STATE_CONTROL;
 
@@ -1117,37 +1118,35 @@ static void gdb_loop(CPUState * env)
     }
 }
 
-int gdb_condition (CPUState * env)
+static bool gdb_condition (CPUState * env)
 {
     struct GDBState    *s     = env->kvm->m_gdb;
 
     if (s->running_state == GDB_STATE_DETACH)
     {
         DPRINTF ("%s: GDB_STATE_DETACH Returning 0\n", __func__);
-        return 0;
+        return false;
     }
 
     if (env != s->c_cpu && s->c_cpu != NULL)
     {
         DPRINTF ("%s: (env != s->c_cpu && s->c_cpu != NULL) Returning 0\n", __func__);
-        return 0;
+        return false;
     }
 
     if ((s->running_state == GDB_STATE_STEP) || (s->running_state == GDB_STATE_INIT))
     {
         DPRINTF ("%s: %s Returning 1\n", __func__, gdb_state_str[s->running_state]);
-        return 1;
+        return true;
     }
 
-    return 1;
+    // We reached this point which means that kvm_handle_debug() called us for some valid reason.
+    // So lets say that the condition has been satisfied for gdb_loop()
+    return true;
 }
 
 void gdb_srv_handle_debug(CPUState * env)
 {
-    struct GDBState *s = env->kvm->m_gdb;
-    s->c_cpu = env;
-    s->g_cpu = env;
-
     if (!gdb_condition (env)){
         DPRINTF ("%s: gdb_condition failed [CPU # %d]\n", __func__, (uint32_t) env->cpu_id);
         return;
@@ -1192,10 +1191,7 @@ int gdb_srv_start_and_wait (struct kvm *p_kvm, int port)
     gdb_srv_accept (s);
 
     s->running_state = GDB_STATE_INIT;
-
-    s->g_cpu = p_kvm->first_cpu;
-    s->c_cpu = p_kvm->first_cpu;
-
+    s->c_cpu = NULL;
     atexit (close_gdb_sockets);
 
     return 0;
