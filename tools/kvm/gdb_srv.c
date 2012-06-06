@@ -285,9 +285,10 @@ static const int gpr_map32[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 #define IDX_XMM_REGS    (IDX_FP_REGS + 16)
 #define IDX_MXCSR_REG   (IDX_XMM_REGS + CPU_NB_REGS)
 
-#if 1
 static int num_g_regs = NUM_CORE_REGS;
 
+/* We support the basic register reading only */
+/* Refer to qemu-kvm/gdbstub.c if we need to implement full support */
 static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
 {
     struct kvm_regs  *regs = &env->regs;
@@ -322,230 +323,54 @@ static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
     return 0;  /* Zero means no register was read */
 }
 
-static int gdb_write_register(CPUState *env, uint8_t *mem_buf, int reg)
+/* We support the basic register writing only */
+/* Refer to qemu-kvm/gdbstub.c if we need to implement full support */
+static int gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
 {
-
-    printf("gdb_write_register\n");
-    while(1);
-/*
     struct kvm_regs  *regs = &env->regs;
     struct kvm_sregs *sregs = &env->sregs;
 
-    uint32_t reg_val = 0;
+    uint32_t * p_reg = NULL;
+    uint16_t * p_sel = NULL;
+    bool is_selector = false;
 
     switch(n)
     {
-        case EAX: reg_val = (uint32_t) regs->rax;           break;
-        case ECX: reg_val = (uint32_t) regs->rcx;           break;
-        case EDX: reg_val = (uint32_t) regs->rdx;           break;
-        case EBX: reg_val = (uint32_t) regs->rbx;           break;
-        case ESP: reg_val = (uint32_t) regs->rsp;           break;
-        case EBP: reg_val = (uint32_t) regs->rbp;           break;
-        case ESI: reg_val = (uint32_t) regs->rsi;           break;
-        case EDI: reg_val = (uint32_t) regs->rdi;           break;
-        case  PC: reg_val = (uint32_t) regs->rip;           break;
-        case  PS: reg_val = (uint32_t) regs->rflags;        break;
-        case  CS: reg_val = (uint32_t) sregs->cs.selector;  break;
-        case  SS: reg_val = (uint32_t) sregs->ss.selector;  break;
-        case  DS: reg_val = (uint32_t) sregs->ds.selector;  break;
-        case  ES: reg_val = (uint32_t) sregs->es.selector;  break;
-        case  FS: reg_val = (uint32_t) sregs->fs.selector;  break;
-        case  GS: reg_val = (uint32_t) sregs->gs.selector;  break;
+        case EAX: p_reg = (uint32_t *) &regs->rax;           break;
+        case ECX: p_reg = (uint32_t *) &regs->rcx;           break;
+        case EDX: p_reg = (uint32_t *) &regs->rdx;           break;
+        case EBX: p_reg = (uint32_t *) &regs->rbx;           break;
+        case ESP: p_reg = (uint32_t *) &regs->rsp;           break;
+        case EBP: p_reg = (uint32_t *) &regs->rbp;           break;
+        case ESI: p_reg = (uint32_t *) &regs->rsi;           break;
+        case EDI: p_reg = (uint32_t *) &regs->rdi;           break;
+        case  PC: p_reg = (uint32_t *) &regs->rip;           break;
+        case  PS: p_reg = (uint32_t *) &regs->rflags;        break;
+        case  CS: p_sel = (uint16_t *) &sregs->cs.selector;  is_selector = true; break;
+        case  SS: p_sel = (uint16_t *) &sregs->ss.selector;  is_selector = true; break;
+        case  DS: p_sel = (uint16_t *) &sregs->ds.selector;  is_selector = true; break;
+        case  ES: p_sel = (uint16_t *) &sregs->es.selector;  is_selector = true; break;
+        case  FS: p_sel = (uint16_t *) &sregs->fs.selector;  is_selector = true; break;
+        case  GS: p_sel = (uint16_t *) &sregs->gs.selector;  is_selector = true; break;
         default:
             EPRINTF("Error: Unknown Registers\n");
-            return (-1);
+            return 0;
     }
 
-    GET_REG32(reg_val);
-*/
-    return 0;  /* Zero means no register was written */
-}
-
-#else
-static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
-{
-    if (n < CPU_NB_REGS) {
-        if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-            GET_REG64(env->regs[gpr_map[n]]);
-        } else if (n < CPU_NB_REGS32) {
-            GET_REG32(env->regs[gpr_map32[n]]);
-        }
-    } else if (n >= IDX_FP_REGS && n < IDX_FP_REGS + 8) {
-#ifdef USE_X86LDOUBLE
-        /* FIXME: byteswap float values - after fixing fpregs layout. */
-        memcpy(mem_buf, &env->fpregs[n - IDX_FP_REGS], 10);
-#else
-        memset(mem_buf, 0, 10);
-#endif
-        return 10;
-    } else if (n >= IDX_XMM_REGS && n < IDX_XMM_REGS + CPU_NB_REGS) {
-        n -= IDX_XMM_REGS;
-        if (n < CPU_NB_REGS32 ||
-            (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK)) {
-            stq_p(mem_buf, env->xmm_regs[n].XMM_Q(0));
-            stq_p(mem_buf + 8, env->xmm_regs[n].XMM_Q(1));
-            return 16;
-        }
-    } else {
-        switch (n) {
-        case IDX_IP_REG:
-            if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-                GET_REG64(env->eip);
-            } else {
-                GET_REG32(env->eip);
-            }
-        case IDX_FLAGS_REG: GET_REG32(env->eflags);
-
-        case IDX_SEG_REGS:     GET_REG32(env->segs[R_CS].selector);
-        case IDX_SEG_REGS + 1: GET_REG32(env->segs[R_SS].selector);
-        case IDX_SEG_REGS + 2: GET_REG32(env->segs[R_DS].selector);
-        case IDX_SEG_REGS + 3: GET_REG32(env->segs[R_ES].selector);
-        case IDX_SEG_REGS + 4: GET_REG32(env->segs[R_FS].selector);
-        case IDX_SEG_REGS + 5: GET_REG32(env->segs[R_GS].selector);
-
-        case IDX_FP_REGS + 8:  GET_REG32(env->fpuc);
-        case IDX_FP_REGS + 9:  GET_REG32((env->fpus & ~0x3800) |
-                                         (env->fpstt & 0x7) << 11);
-        case IDX_FP_REGS + 10: GET_REG32(0); /* ftag */
-        case IDX_FP_REGS + 11: GET_REG32(0); /* fiseg */
-        case IDX_FP_REGS + 12: GET_REG32(0); /* fioff */
-        case IDX_FP_REGS + 13: GET_REG32(0); /* foseg */
-        case IDX_FP_REGS + 14: GET_REG32(0); /* fooff */
-        case IDX_FP_REGS + 15: GET_REG32(0); /* fop */
-
-        case IDX_MXCSR_REG: GET_REG32(env->mxcsr);
-        }
+    if(!is_selector)
+    {
+        // We actually write 64-bits but say that we wrote 32-bits,
+        // because we don't support x86-64 for the moment.
+        *p_reg = (uint64_t) ldl_p(mem_buf);
     }
-    return 0;
-}
-
-static int cpu_x86_gdb_load_seg(CPUState *env, int sreg, uint8_t *mem_buf)
-{
-    uint16_t selector = ldl_p(mem_buf);
-
-    if (selector != env->segs[sreg].selector) {
-        unsigned int limit, flags;
-        target_ulong base;
-
-        if (!(env->cr[0] & CR0_PE_MASK) || (env->eflags & VM_MASK)) {
-            base = selector << 4;
-            limit = 0xffff;
-            flags = 0;
-        } else {
-            if (!cpu_x86_get_descr_debug(env, selector, &base, &limit, &flags))
-                return 4;
-        }
-        cpu_x86_load_seg_cache(env, sreg, selector, base, limit, flags);
+    else
+    {
+        // We actually write 16-bits but say that we wrote 32-bits,
+        *p_sel = (uint16_t) ldl_p(mem_buf);
     }
+
     return 4;
 }
-
-static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
-{
-    uint32_t tmp;
-
-    if (n < CPU_NB_REGS) {
-        if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-            env->regs[gpr_map[n]] = ldtul_p(mem_buf);
-            return sizeof(target_ulong);
-        } else if (n < CPU_NB_REGS32) {
-            n = gpr_map32[n];
-            env->regs[n] &= ~0xffffffffUL;
-            env->regs[n] |= (uint32_t)ldl_p(mem_buf);
-            return 4;
-        }
-    } else if (n >= IDX_FP_REGS && n < IDX_FP_REGS + 8) {
-#ifdef USE_X86LDOUBLE
-        /* FIXME: byteswap float values - after fixing fpregs layout. */
-        memcpy(&env->fpregs[n - IDX_FP_REGS], mem_buf, 10);
-#endif
-        return 10;
-    } else if (n >= IDX_XMM_REGS && n < IDX_XMM_REGS + CPU_NB_REGS) {
-        n -= IDX_XMM_REGS;
-        if (n < CPU_NB_REGS32 ||
-            (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK)) {
-            env->xmm_regs[n].XMM_Q(0) = ldq_p(mem_buf);
-            env->xmm_regs[n].XMM_Q(1) = ldq_p(mem_buf + 8);
-            return 16;
-        }
-    } else {
-        switch (n) {
-        case IDX_IP_REG:
-            if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-                env->eip = ldq_p(mem_buf);
-                return 8;
-            } else {
-                env->eip &= ~0xffffffffUL;
-                env->eip |= (uint32_t)ldl_p(mem_buf);
-                return 4;
-            }
-        case IDX_FLAGS_REG:
-            env->eflags = ldl_p(mem_buf);
-            return 4;
-
-        case IDX_SEG_REGS:     return cpu_x86_gdb_load_seg(env, R_CS, mem_buf);
-        case IDX_SEG_REGS + 1: return cpu_x86_gdb_load_seg(env, R_SS, mem_buf);
-        case IDX_SEG_REGS + 2: return cpu_x86_gdb_load_seg(env, R_DS, mem_buf);
-        case IDX_SEG_REGS + 3: return cpu_x86_gdb_load_seg(env, R_ES, mem_buf);
-        case IDX_SEG_REGS + 4: return cpu_x86_gdb_load_seg(env, R_FS, mem_buf);
-        case IDX_SEG_REGS + 5: return cpu_x86_gdb_load_seg(env, R_GS, mem_buf);
-
-        case IDX_FP_REGS + 8:
-            env->fpuc = ldl_p(mem_buf);
-            return 4;
-        case IDX_FP_REGS + 9:
-            tmp = ldl_p(mem_buf);
-            env->fpstt = (tmp >> 11) & 7;
-            env->fpus = tmp & ~0x3800;
-            return 4;
-        case IDX_FP_REGS + 10: /* ftag */  return 4;
-        case IDX_FP_REGS + 11: /* fiseg */ return 4;
-        case IDX_FP_REGS + 12: /* fioff */ return 4;
-        case IDX_FP_REGS + 13: /* foseg */ return 4;
-        case IDX_FP_REGS + 14: /* fooff */ return 4;
-        case IDX_FP_REGS + 15: /* fop */   return 4;
-
-        case IDX_MXCSR_REG:
-            env->mxcsr = ldl_p(mem_buf);
-            return 4;
-        }
-    }
-    /* Unrecognised register.  */
-    return 0;
-}
-
-static int num_g_regs = NUM_CORE_REGS;
-
-static int gdb_read_register(CPUState *env, uint8_t *mem_buf, int reg)
-{
-    GDBRegisterState *r;
-
-    if (reg < NUM_CORE_REGS)
-        return cpu_gdb_read_register(env, mem_buf, reg);
-
-    for (r = env->gdb_regs; r; r = r->next) {
-        if (r->base_reg <= reg && reg < r->base_reg + r->num_regs) {
-            return r->get_reg(env, mem_buf, reg - r->base_reg);
-        }
-    }
-    return 0;
-}
-
-static int gdb_write_register(CPUState *env, uint8_t *mem_buf, int reg)
-{
-    GDBRegisterState *r;
-
-    if (reg < NUM_CORE_REGS)
-        return cpu_gdb_write_register(env, mem_buf, reg);
-
-    for (r = env->gdb_regs; r; r = r->next) {
-        if (r->base_reg <= reg && reg < r->base_reg + r->num_regs) {
-            return r->set_reg(env, mem_buf, reg - r->base_reg);
-        }
-    }
-    return 0;
-}
-#endif
 
 static int gdb_breakpoint_insert(target_ulong addr, target_ulong len, int type, CPUState *env)
 {
@@ -710,7 +535,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     uint8_t                 *registers;
     int                     addr;
 
-    printf("--------------------------------------------------------------------\n");
+    DPRINTF("--------------------------------------------------------------------\n");
     DPRINTF("command='%s'\n", line_buf);
 
     p = line_buf;

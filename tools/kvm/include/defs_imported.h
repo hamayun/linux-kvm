@@ -8,7 +8,7 @@
 // header file taken from qemu-kvm
 #include "qemu-queue.h"
 
-//#define CONFIG_X86_64
+//#define CONFIG_X86_64             // Currently Not Supported
 #define TARGET_LONG_ALIGNMENT 4
 
 #ifdef CONFIG_X86_64
