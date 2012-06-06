@@ -267,24 +267,6 @@ static int put_packet(GDBState *s, const char *buf)
 #define ldtul_p(addr) ldl_p(addr)
 #endif
 
-
-#ifdef TARGET_X86_64
-static const int gpr_map[16] = {
-    R_EAX, R_EBX, R_ECX, R_EDX, R_ESI, R_EDI, R_EBP, R_ESP,
-    8, 9, 10, 11, 12, 13, 14, 15
-};
-#else
-#define gpr_map gpr_map32
-#endif
-static const int gpr_map32[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
-
-#define IDX_IP_REG      CPU_NB_REGS
-#define IDX_FLAGS_REG   (IDX_IP_REG + 1)
-#define IDX_SEG_REGS    (IDX_FLAGS_REG + 1)
-#define IDX_FP_REGS     (IDX_SEG_REGS + 6)
-#define IDX_XMM_REGS    (IDX_FP_REGS + 16)
-#define IDX_MXCSR_REG   (IDX_XMM_REGS + CPU_NB_REGS)
-
 static int num_g_regs = NUM_CORE_REGS;
 
 /* We support the basic register reading only */
@@ -389,7 +371,7 @@ static void gdb_breakpoint_remove_all (CPUState *env)
 
 static void gdb_set_cpu_pc(GDBState *s, target_ulong pc)
 {
-    cpu_synchronize_state(s->c_cpu);
+    kvm_cpu_synchronize_state(s->c_cpu);
     s->c_cpu->regs.rip = pc;
 }
 
@@ -450,45 +432,6 @@ static int gdb_srv_open (int port)
     }
 
     return fd;
-}
-
-struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ulong pc)
-{
-    struct kvm_sw_breakpoint *bp;
-
-    QTAILQ_FOREACH(bp, &env->kvm->kvm_sw_breakpoints, entry) {
-        if (bp->pc == pc) {
-            return bp;
-        }
-    }
-    return NULL;
-}
-
-int kvm_sw_breakpoints_active(CPUState *env)
-{
-    return !QTAILQ_EMPTY(&env->kvm->kvm_sw_breakpoints);
-}
-
-struct kvm_set_guest_debug_data {
-    struct kvm_guest_debug dbg;
-    CPUState *env;
-    int err;
-};
-
-int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
-{
-    struct kvm_set_guest_debug_data data;
-
-    data.dbg.control = reinject_trap;
-
-    if (env->kvm->sw_single_step > 0) {
-        data.dbg.control |= KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
-    }
-
-    kvm_arch_update_guest_debug(env, &data.dbg);
-
-    data.err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &data.dbg);
-    return data.err;
 }
 
 /* enable or disable single step mode. EXCP_DEBUG is returned by the
@@ -636,7 +579,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     //read registers
     case 'g':
         env = s->g_cpu;
-        cpu_synchronize_state(env);
+        kvm_cpu_synchronize_state(env);
         len = 0;
         for (addr = 0; addr < num_g_regs; addr++) {
             reg_size = gdb_read_register(env, mem_buf + len, addr);
@@ -649,7 +592,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     //GXX... - write regs
     case 'G':
         env = s->g_cpu;
-        cpu_synchronize_state(env);
+        kvm_cpu_synchronize_state(env);
         registers = mem_buf;
         len = strlen(p) / 2;
         hextomem((uint8_t *)registers, p, len);
@@ -810,7 +753,7 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
             thread = strtoull(p+16, (char **)&p, 16);
             env = find_cpu(s, thread);
             if (env != NULL) {
-                cpu_synchronize_state(env);
+                kvm_cpu_synchronize_state(env);
                 len = snprintf((char *)mem_buf, sizeof(mem_buf),
                                "CPU#%ld [%s]", env->cpu_id,
                                env->paused ? "halted " : "running");
@@ -970,15 +913,15 @@ static bool gdb_condition (CPUState * env)
     return true;
 }
 
-void gdb_srv_handle_debug(CPUState * env)
+int gdb_srv_handle_debug(CPUState * env)
 {
     if (!gdb_condition (env)){
         DPRINTF ("%s: gdb_condition failed [CPU # %d]\n", __func__, (uint32_t) env->cpu_id);
-        return;
+        return -1;
     }
 
     gdb_loop (env);
-    return;
+    return 0;
 }
 
 static void close_gdb_sockets (void)
@@ -1023,7 +966,7 @@ int gdb_srv_start_and_wait (struct kvm *p_kvm, int port)
 }
 
 /* TODO: Register this handler and interrupt KVM Guest */
-int gdb_start_debug (void)
+int gdb_srv_start_debug (void)
 {
     int                 idx, bstart = 0;
     for (idx = 0; idx < no_kvm_instances; idx++)
@@ -1037,7 +980,7 @@ int gdb_start_debug (void)
     return bstart;
 }
 
-int gdb_server_init (struct kvm * p_kvm)
+int gdb_srv_init (struct kvm * p_kvm)
 {
     struct GDBState *s = malloc(sizeof (struct GDBState));
     if(!s)

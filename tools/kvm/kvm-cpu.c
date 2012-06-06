@@ -545,7 +545,7 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
             //        cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), (unsigned int)(cpu->kvm_run->fail_entry));
             break;
 		case KVM_EXIT_DEBUG:
-            kvm_handle_debug(cpu);
+            kvm_arch_handle_debug(cpu);
             //kvm_cpu__show_registers(cpu);
             //kvm_cpu__show_code(cpu);
             break;

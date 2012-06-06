@@ -4,9 +4,7 @@
 #include <inttypes.h>
 #include "include/defs_imported.h"
 
-#define GDB_MAX_PACKET_LENGTH (4096 * 4)
-
-#define DEBUG_GDB_SRV
+//#define DEBUG_GDB_SRV
 
 #ifdef DEBUG_GDB_SRV
 #define DPRINTF(fmt, args...)                                                  \
@@ -39,6 +37,8 @@ enum
     GDB_WATCHPOINT_ACCESS
 };
 
+#define GDB_MAX_PACKET_LENGTH (4096 * 4)
+
 #define EXCP_INTERRUPT  0x10000 /* async interruption */
 #define EXCP_HLT        0x10001 /* hlt instruction reached */
 #define EXCP_DEBUG      0x10002 /* cpu stopped after a breakpoint or singlestep */
@@ -61,13 +61,9 @@ typedef struct GDBState {
     struct kvm         *p_kvm;
 } GDBState;
 
-int gdb_server_init (struct kvm * p_kvm);
-int gdb_srv_start_and_wait (struct kvm *pinstance, int port);
-void gdb_srv_handle_debug(CPUState * env);
-int gdb_start_debug (void);
-
-struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ulong pc);
-int kvm_sw_breakpoints_active(CPUState *env);
-int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap);
+int gdb_srv_init (struct kvm * p_kvm);
+int gdb_srv_start_and_wait (struct kvm *p_kvm, int port);
+int gdb_srv_handle_debug(CPUState * env);
+int gdb_srv_start_debug (void);
 
 #endif

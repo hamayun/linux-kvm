@@ -4,31 +4,14 @@
 #define _DEFS_IMPORTED_
 
 #include <inttypes.h>
+#include "qemu-queue.h"     // taken from qemu-kvm
 
-// header file taken from qemu-kvm
-#include "qemu-queue.h"
-
-//#define CONFIG_X86_64             // Currently Not Supported
 #define TARGET_LONG_ALIGNMENT 4
-
-#ifdef CONFIG_X86_64
-#define TARGET_LONG_BITS 64
-typedef uint64_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
-#else
 #define TARGET_LONG_BITS 32
 typedef uint32_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
-#endif
 
-#define CPU_NB_REGS64 16
 #define CPU_NB_REGS32 8
-
-#ifdef CONFIG_X86_64
-#define CPU_NB_REGS CPU_NB_REGS64
-#else
 #define CPU_NB_REGS CPU_NB_REGS32
-#endif
-
-//#define NUM_CORE_REGS (CPU_NB_REGS * 2 + 25)
 #define NUM_CORE_REGS (CPU_NB_REGS + 8)
 
 /* Breakpoint/watchpoint flags */
@@ -56,7 +39,7 @@ typedef struct CPUWatchpoint {
 
 QTAILQ_HEAD(kvm_sw_breakpoint_head, kvm_sw_breakpoint);
 
-/* Taken From /home/hamayun/workspace/Rabbits-sls/rabbits/qemu/sc_qemu/bswap.h */
+/* Taken From Rabbits/rabbits/qemu/sc_qemu/bswap.h */
 
 static inline int ldl_le_p(const void *ptr)
 {
@@ -96,7 +79,7 @@ static inline void stq_le_p(void *ptr, uint64_t v)
     stl_le_p(p + 4, v >> 32);
 }
 
-/* Taken From /home/hamayun/workspace/Rabbits-sls/rabbits/qemu/sc_qemu/cpu-all.h */
+/* Taken From Rabbits/rabbits/qemu/sc_qemu/cpu-all.h */
 
 #define ldl_p(p) ldl_le_p(p)
 #define ldq_p(p) ldq_le_p(p)
