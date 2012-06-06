@@ -151,6 +151,7 @@ static struct kvm *kvm__new(void)
 	return kvm;
 }
 
+#if 0
 static int kvm__create_socket(struct kvm *kvm)
 {
 	char full_name[PATH_MAX];
@@ -188,6 +189,7 @@ fail:
 	close(s);
 	return -1;
 }
+#endif
 
 void kvm__remove_socket(const char *name)
 {
@@ -382,6 +384,7 @@ int kvm__recommended_cpus(struct kvm *kvm)
 	return ret;
 }
 
+#if 0
 static void kvm__pid(int fd, u32 type, u32 len, u8 *msg)
 {
 	pid_t pid = getpid();
@@ -393,6 +396,7 @@ static void kvm__pid(int fd, u32 type, u32 len, u8 *msg)
 	if (r < 0)
 		pr_warning("Failed sending PID");
 }
+#endif
 
 /*
  * The following hack should be removed once 'x86: Raise the hard
@@ -458,7 +462,7 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 		die_perror("KVM_CREATE_PIT2 ioctl");
 
     kvm->robust_singlestep = kvm__supports_extension(kvm, KVM_CAP_X86_ROBUST_SINGLESTEP);
-    if(kvm->robust_singlestep) printf("KVM has Robust Single Step\n");
+    //if(kvm->robust_singlestep) printf("KVM has Robust Single Step\n");
 
     kvm->debugregs         = kvm__supports_extension(kvm, KVM_CAP_DEBUGREGS);
 
@@ -495,10 +499,6 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 #define BOOT_LOADER_SELECTOR	0x0000
 #define BOOT_LOADER_IP		0x7C00
 
-// For use with bootstrap.S
-//#define BOOT_LOADER_SELECTOR	0x1000
-//#define BOOT_LOADER_IP		0x0000
-
 #define BOOT_LOADER_SP		0x8000
 #define BOOT_CMDLINE_OFFSET	0x20000
 
@@ -517,11 +517,11 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 	p = guest_real_to_host(kvm, BOOT_LOADER_SELECTOR, BOOT_LOADER_IP);
 
 	while ((nr = read(fd, p, 65536)) > 0)
-        {
-            q = host_to_guest_flat(kvm, p);
-            printf("%s: Loaded 0x%X bytes at 0x%X (Host 0x%x)\n", __func__, nr, (u32)q, (u32)p);
-            p += nr;
-        }
+    {
+        q = host_to_guest_flat(kvm, p);
+        printf("%s : Loaded 0x%X bytes at 0x%X (Host 0x%x)\n", __func__, nr, (u32)q, (u32)p);
+        p += nr;
+    }
 
 	kvm->boot_selector	= BOOT_LOADER_SELECTOR;
 	kvm->boot_ip		= BOOT_LOADER_IP;
@@ -571,7 +571,7 @@ static int load_elf_binary(struct kvm *kvm, int fd)
 
     if((i = read(fd, base_ptr, elf_stats.st_size)) < elf_stats.st_size)
     {
-        printf("could not read, bytes read = %d, elf_stats.st_size = %d\n", i, elf_stats.st_size);
+        printf("could not read, bytes read = %d, elf_stats.st_size = %d\n", i, (uint32_t) elf_stats.st_size);
 
         i = read(fd, base_ptr+i, 4);
         printf("Read More %d bytes\n", i);
@@ -589,7 +589,7 @@ static int load_elf_binary(struct kvm *kvm, int fd)
     elf_header = (Elf32_Ehdr *) base_ptr;    // point elf_header at our object in memory
     elf = elf_begin(fd, ELF_C_READ, NULL);    // Initialize 'elf' pointer to our file descriptor
 
-    printf("%s: Loading ELF Binary at vm_addr: 0x%x, Size = %d\n", __func__, (uint32_t)vm_addr, (int)elf_stats.st_size);
+    printf("%s  : Loading ELF Binary at vm_addr: 0x%x, Size = %d\n", __func__, (uint32_t)vm_addr, (int)elf_stats.st_size);
     printf("Section Type        Flags\tVirt Addr\tSize (bytes)\tOffset\t           Name\n");
     /* Iterate through section headers */
     while((scn = elf_nextscn(elf, scn)) != 0)
@@ -682,13 +682,6 @@ static int load_elf_binary(struct kvm *kvm, int fd)
     }
 
     free(base_ptr);
-
-    /*
-    kvm->boot_selector	= BOOT_LOADER_SELECTOR;
-    kvm->boot_ip	= BOOT_LOADER_IP;
-    kvm->boot_sp	= BOOT_LOADER_SP;
-     */
-
     return true;
 }
 
@@ -820,7 +813,7 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 		const char *initrd_filename, const char *kernel_cmdline, u16 vidmode)
 {
 	bool ret;
-	int fd_kernel = -1, fd_initrd = -1, fd_bootstrap = -1;
+	int fd_kernel = -1, fd_initrd = -1;
 
 	fd_kernel = open(kernel_filename, O_RDONLY);
 	if (fd_kernel < 0)
@@ -843,37 +836,12 @@ bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 	if (ret)
 		goto found_kernel;
 
-#if 1
-	pr_warning("%s is not a bzImage. Trying to load it as a ELF binary...", kernel_filename);
-        //fd_bootstrap = open("/home/hamayun/sandbox/bootloader_marius/test_i386_dna_th/boot/16/bin/setup.bin", O_RDONLY);
-        fd_bootstrap = open("/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/bin/KVMx86BootLoader.bin", O_RDONLY);;
-
-        //fd_bootstrap = open("/home/hamayun/workspace/NaSiK/hw/kvm-85/user/test/x86/bootstrap", O_RDONLY);
-	if (fd_bootstrap < 0)
-		die("Unable to open bootstrap");
-
-        ret = load_flat_binary(kvm, fd_bootstrap);
-        if (!ret){
-            close(fd_bootstrap);
-            die("Failed in loading bootstrap");
-        }
-
-        ret = load_elf_binary(kvm, fd_kernel);
-        if (ret){
-            close(fd_bootstrap);
-            goto found_kernel;
-        }
-
-#else
-        pr_warning("%s is not a bzImage. Trying to load it as a flat binary...", kernel_filename);
+	pr_warning("%s is not a bzImage. Trying to load it as a flat binary...", kernel_filename);
 	ret = load_flat_binary(kvm, fd_kernel);
-	if (!ret){
-            close(fd_kernel);
-            die("Failed in loading bootstrap");
-        }
-#endif
+	if (ret)
+        goto found_kernel;
 
-        close(fd_kernel);
+	close(fd_kernel);
 
 	die("%s is not a valid bzImage or flat binary", kernel_filename);
 
@@ -882,6 +850,36 @@ found_kernel:
 
 	return ret;
 }
+
+bool kvm__load_bootstrap_elf_kernel(struct kvm *kvm,
+        const char *kernel_filename, const char *boot_loader)
+{
+	bool ret;
+	int fd_bootstrap = -1, fd_kernel = -1;
+
+    fd_bootstrap = open(boot_loader, O_RDONLY);
+	if (fd_bootstrap < 0)
+		die("Unable to open bootstrap");
+
+	//printf("Loading Bootstrap as a flat binary ... %s\n", boot_loader);
+    ret = load_flat_binary(kvm, fd_bootstrap);
+    if (!ret){
+        close(fd_bootstrap);
+        die("Failed in loading bootstrap");
+    }
+
+	fd_kernel = open(kernel_filename, O_RDONLY);
+	if (fd_kernel < 0)
+		die("Unable to open ELF kernel %s", kernel_filename);
+
+	//printf("Loading Kernel as an ELF binary ... %s\n", kernel_filename);
+    ret = load_elf_binary(kvm, fd_kernel);
+
+    close(fd_bootstrap);
+    close(fd_kernel);
+    return ret;
+}
+
 
 /**
  * kvm__setup_bios - inject BIOS into guest system memory

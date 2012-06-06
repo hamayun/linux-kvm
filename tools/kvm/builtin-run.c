@@ -45,8 +45,6 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#include "gdb_srv.h"
-
 #define DEFAULT_KVM_DEV		"/dev/kvm"
 #define DEFAULT_CONSOLE		"serial"
 #define DEFAULT_NETWORK		"user"
@@ -63,21 +61,10 @@
 #define MIN_RAM_SIZE_BYTE	(MIN_RAM_SIZE_MB << MB_SHIFT)
 
 struct kvm *kvm;
-
-struct kvm * crt_kvm_instance = NULL;
-struct kvm * kvm_instances[10];
-int          no_kvm_instances = 0;
-
 struct kvm_cpu *kvm_cpus[KVM_NR_CPUS];
 __thread struct kvm_cpu *current_kvm_cpu;
 
 static u64 ram_size;
-
-// Variables for the platform main file
-uint64_t kvm_ram_size = 0;
-void *   kvm_userspace_mem_addr = NULL;
-
-static unsigned int nr_online_cpus;
 static u8  image_count;
 static u8 num_net_devices;
 static bool virtio_rng;
@@ -89,11 +76,11 @@ static const char *image_filename[MAX_DISK_IMAGES];
 static const char *console;
 static const char *dev;
 static const char *network;
-//static const char *host_ip;
-//static const char *guest_ip;
-//static const char *guest_mac;
-//static const char *host_mac;
-//static const char *script;
+static const char *host_ip;
+static const char *guest_ip;
+static const char *guest_mac;
+static const char *host_mac;
+static const char *script;
 static const char *guest_name;
 static struct virtio_net_params *net_params;
 static bool single_step;
@@ -533,10 +520,8 @@ static void handle_debug(int fd, u32 type, u32 len, u8 *msg)
 
 static void handle_sigalrm(int sig)
 {
-/*
 	serial8250__inject_interrupt(kvm);
 	virtio_console__inject_interrupt(kvm);
-*/
 }
 
 static void handle_stop(int fd, u32 type, u32 len, u8 *msg)
@@ -649,8 +634,7 @@ static u64 get_ram_size(int nr_cpus)
 	u64 available;
 	u64 ram_size;
 
-	//ram_size	= 64 * (nr_cpus + 3);
-        ram_size	= 128;
+	ram_size	= 64 * (nr_cpus + 3);
 
 	available	= host_ram_size() * RAM_SIZE_RATIO;
 	if (!available)
@@ -718,92 +702,15 @@ void kvm_run_help(void)
 	usage_with_options(run_usage, options);
 }
 
-extern void * p_kvm_cpu_adaptor;
-extern uint64_t systemc_kvm_read_memory (void *_this, uint64_t addr, int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_kvm_write_memory (void *_this, uint64_t addr, unsigned char *data, int nbytes, unsigned int *ns, int bIO);
-
-
-static void generic_systemc_mmio_handler(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
-{
-    u64 value;
-    u32 i;
-
-    if(is_write)
-    {
-        //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        systemc_kvm_write_memory(p_kvm_cpu_adaptor, addr, data, len, NULL, 1);
-    }
-    else
-    {
-        //printf("MMIO Read: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        value = systemc_kvm_read_memory(p_kvm_cpu_adaptor, addr, len, NULL, 1);
-        for (i = 0; i < len; i++)
-            data[i] = *((unsigned char *) &value + i);
-    }
-
-    return;
-}
-
-static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
-{
-    //TODO: Move these registration steps to kvm_processor component and use node maps.
-    // Also consider modifying the node maps for device type; Input/Output or Output only.
-    // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
-
-    kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_systemc_mmio_handler, NULL);
-
-    kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC4000000, 0x100000, generic_systemc_mmio_handler, NULL);
-
-    kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6A00000, 0x100000, generic_systemc_mmio_handler, NULL);
-    return 0;
-}
-
-static bool semihosting_io_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
-{
-    uint32_t * pdata = (uint32_t *) data;
-    *pdata = 1;
-
-    printf("semihosting_io_in: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
-    return true;
-}
-
-static bool semihosting_io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
-{
-    uint32_t * pdata = (uint32_t *) data;
-
-    printf("semihosting_io_out: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
-    return true;
-}
-
-static struct ioport_operations semihosting_read_write_ioport_ops = {
-    .io_in		= semihosting_io_in,
-    .io_out		= semihosting_io_out,
-};
-
-
-static int kvm_register_io_callbacks(struct kvm *kvm)
-{
-    ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
-	return 0;
-}
-
-void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, const char *prefix)
+int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 {
 	static char real_cmdline[2048], default_name[20];
+	struct framebuffer *fb = NULL;
+	unsigned int nr_online_cpus;
+	int exit_code = 0;
 	int max_cpus, recommended_cpus;
 	int i;
-
-    for (i = 0; i < argc; i++)
-    {
-        printf("argv[%d] = %s\n", i, argv[i]);
-    }
-
-	// Fill in the function table for SystemC (Called by Platform or Components)
-	ki->gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
+	void *ret;
 
 	signal(SIGALRM, handle_sigalrm);
 	kvm_ipc__register_handler(KVM_IPC_DEBUG, handle_debug);
@@ -822,7 +729,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 				fprintf(stderr, "Cannot handle parameter: "
 						"%s\n", argv[0]);
 				usage_with_options(run_usage, options);
-				return ((void *) EINVAL);
+				return EINVAL;
 			}
 			/* first unhandled parameter is treated as a kernel
 			   image
@@ -839,7 +746,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	if (!kernel_filename) {
 		kernel_usage_with_options();
-		return ((void *) EINVAL);
+		return EINVAL;
 	}
 
 	vmlinux_filename = find_vmlinux();
@@ -851,7 +758,6 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	if (!ram_size)
 		ram_size	= get_ram_size(nrcpus);
-        printf("  # Allocating %lld MB of RAM for %d CPUs\n", ram_size, nrcpus);
 
 	if (ram_size < MIN_RAM_SIZE_MB)
 		die("Not enough memory specified: %lluMB (min %lluMB)", ram_size, MIN_RAM_SIZE_MB);
@@ -872,7 +778,6 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	else
 		active_console  = CONSOLE_8250;
 
-/*
 	if (!host_ip)
 		host_ip = DEFAULT_HOST_ADDR;
 
@@ -889,10 +794,8 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 		script = DEFAULT_SCRIPT;
 
 	symbol__init(vmlinux_filename);
-*/
 
-    // Enable this Function to Modify the TTY terminal for Linux.
-	//term_init();
+	term_init();
 
 	if (!guest_name) {
 		sprintf(default_name, "guest-%u", getpid());
@@ -900,32 +803,12 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	}
 
 	kvm = kvm__init(dev, ram_size, guest_name);
-    crt_kvm_instance = kvm;
 
-    // TODO: Add a global flag here.
-    if(1)
-    {
-        kvm->enable_debug_mode = true;
-        // We force single stepping for first instruction only; afterwards we disable it.
-        kvm->sw_single_step = 1;        // Single step for one instruction
-        gdb_srv_init (kvm);
-    }
-    else
-    {
-        // single stepping mode without gdb support.
-        kvm->sw_single_step = 0;
-        kvm->enable_debug_mode = false;
-    }
+	irq__init(kvm);
 
+	kvm->single_step = single_step;
 
-    kvm_userspace_mem_addr = kvm->ram_start;
-    kvm_ram_size = kvm->ram_size;
-
-    kvm_register_systemc_mmio_callbacks(kvm);
-    kvm_register_io_callbacks(kvm);
-
-	//irq__init(kvm);
-	//ioeventfd__init();
+	ioeventfd__init();
 
 	max_cpus = kvm__max_cpus(kvm);
 	recommended_cpus = kvm__recommended_cpus(kvm);
@@ -961,7 +844,6 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	if (kernel_cmdline)
 		strlcat(real_cmdline, kernel_cmdline, sizeof(real_cmdline));
 
-/*
 	if (!using_rootfs && !image_filename[0]) {
 		char tmp[PATH_MAX];
 
@@ -969,16 +851,15 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 		kvm_setup_resolv("default");
 
 		snprintf(tmp, PATH_MAX, "%s%s", kvm__get_dir(), "default");
-		//if (virtio_9p__register(kvm, tmp, "/dev/root") < 0)
-		//	die("Unable to initialize virtio 9p");
-		//if (virtio_9p__register(kvm, "/", "hostfs") < 0)
-		//	die("Unable to initialize virtio 9p");
+		if (virtio_9p__register(kvm, tmp, "/dev/root") < 0)
+			die("Unable to initialize virtio 9p");
+		if (virtio_9p__register(kvm, "/", "hostfs") < 0)
+			die("Unable to initialize virtio 9p");
 		using_rootfs = custom_rootfs = 1;
 
 		if (!strstr(real_cmdline, "init="))
 			strlcat(real_cmdline, " init=/bin/sh ", sizeof(real_cmdline));
 	}
-*/
 
 	if (using_rootfs) {
 		strcat(real_cmdline, " root=/dev/root rw rootflags=rw,trans=virtio,version=9p2000.L rootfstype=9p");
@@ -991,7 +872,6 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 		strlcat(real_cmdline, " root=/dev/vda rw ", sizeof(real_cmdline));
 	}
 
-        /*
 	if (image_count) {
 		kvm->nr_disks = image_count;
 		kvm->disks    = disk_image__open_all(image_filename, readonly_image, image_count);
@@ -999,7 +879,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 			die("Unable to load all disk images.");
 
 		virtio_blk__init_all(kvm);
-	}*/
+	}
 
 	printf("  # kvm run -k %s -m %Lu -c %d --name %s\n", kernel_filename, ram_size / 1024 / 1024, nrcpus, guest_name);
 
@@ -1009,36 +889,14 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	kvm->vmlinux		= vmlinux_filename;
 
-    printf("KVM Initialized\n");
-#if 0
-    {
-        u8 * ptr = kvm->ram_start + 0x100005;
-        // e8 ae ef 00 00
-        printf("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
-
-        ptr[0] = 0xcc;
-    }
-#endif
-
-    return (void *) kvm;             // Return KVM Instance Pointer to Caller
-}
-
-int kvm_cmd_run(void)
-{
-    int i;
-    //	struct framebuffer *fb = NULL;
-    int exit_code = 0;
-    void *ret;
-
 	ioport__setup_legacy();
 
-	//rtc__init();
+	rtc__init();
 
 	serial8250__init(kvm);
 
-	//pci__init();
+	pci__init();
 
-/*
 	if (active_console == CONSOLE_VIRTIO)
 		virtio_console__init(kvm);
 
@@ -1047,9 +905,7 @@ int kvm_cmd_run(void)
 
 	if (balloon)
 		virtio_bln__init(kvm);
-*/
 
-/*
 	if (!network)
 		network = DEFAULT_NETWORK;
 
@@ -1075,9 +931,8 @@ int kvm_cmd_run(void)
 
 		virtio_net__init(&net_params);
 	}
-*/
 
-//	kvm__start_timer(kvm);
+	kvm__start_timer(kvm);
 
 	kvm__setup_bios(kvm);
 
@@ -1085,18 +940,10 @@ int kvm_cmd_run(void)
 		kvm_cpus[i] = kvm_cpu__init(kvm, i);
 		if (!kvm_cpus[i])
 			die("unable to initialize KVM VCPU");
-
-        if(i == 0)
-            kvm->first_cpu = kvm_cpus[i];
-        else
-            kvm_cpus[i-1]->next_cpu = kvm_cpus[i];
-
-        kvm_cpus[i]->next_cpu = NULL;
 	}
 
 	kvm__init_ram(kvm);
 
-        /*
 	kbd__init(kvm);
 
 	pci_shmem__init(kvm);
@@ -1118,9 +965,6 @@ int kvm_cmd_run(void)
 
 	thread_pool__init(nr_online_cpus);
 	ioeventfd__start();
-        */
-
-    //kvm__dump_mem(kvm, 0x0, 64);
 
 	for (i = 0; i < nrcpus; i++) {
 		if (pthread_create(&kvm_cpus[i]->thread, NULL, kvm_cpu_thread, kvm_cpus[i]) != 0)
@@ -1143,14 +987,12 @@ int kvm_cmd_run(void)
 
 	compat__print_all_messages();
 
-/*
 	fb__stop();
 
 	virtio_blk__delete_all(kvm);
 	virtio_rng__delete_all(kvm);
 
 	disk_image__close_all(kvm->disks, image_count);
-*/
 	kvm__delete(kvm);
 
 	if (!exit_code)

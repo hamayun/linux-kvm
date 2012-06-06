@@ -44,6 +44,8 @@ struct kvm {
 
     bool                          nmi_disabled;
 
+    bool                          single_step;  /* for kvm tool */
+
     u16                           boot_selector;
     u16                           boot_ip;
     u16                           boot_sp;
@@ -56,6 +58,7 @@ struct kvm {
 
     const char                   *name;
 
+    // For GDB Server
     struct kvm_cpu               *first_cpu;
     int                           sw_single_step;     /* how many instructions to single step ? */
     int                           robust_singlestep;  /* does kvm support robust single step ? for info only */
@@ -76,6 +79,8 @@ void kvm__init_ram(struct kvm *kvm);
 void kvm__delete(struct kvm *kvm);
 bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 			const char *initrd_filename, const char *kernel_cmdline, u16 vidmode);
+bool kvm__load_bootstrap_elf_kernel(struct kvm *kvm,
+            const char *kernel_filename, const char *boot_loader);
 void kvm__setup_bios(struct kvm *kvm);
 void kvm__start_timer(struct kvm *kvm);
 void kvm__stop_timer(struct kvm *kvm);

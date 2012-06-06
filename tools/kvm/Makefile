@@ -6,8 +6,8 @@ WERROR=0
 
 ifeq ($(strip $(V)),)
 	E = @echo
-#	Q = @
-	Q =
+	Q = @
+#	Q =
 else
 	E = @\#
 	Q =
@@ -28,12 +28,12 @@ GUEST_INIT := guest/init
 
 OBJS	+= builtin-balloon.o
 OBJS	+= builtin-debug.o
-OBJS	+= builtin-help.o
+#OBJS	+= builtin-help.o
 OBJS	+= builtin-list.o
 OBJS	+= builtin-stat.o
 OBJS	+= builtin-pause.o
 OBJS	+= builtin-resume.o
-OBJS	+= builtin-run.o
+#OBJS	+= builtin-run.o
 OBJS	+= builtin-setup.o
 OBJS	+= builtin-stop.o
 OBJS	+= builtin-version.o
@@ -74,7 +74,7 @@ OBJS	+= net/uip/udp.o
 OBJS	+= net/uip/buf.o
 OBJS	+= net/uip/csum.o
 OBJS	+= net/uip/dhcp.o
-OBJS	+= kvm-cmd.o
+#OBJS	+= kvm-cmd.o
 OBJS	+= mptable.o
 OBJS	+= rbtree.o
 OBJS	+= threadpool.o
@@ -89,6 +89,7 @@ OBJS	+= hw/pci-shmem.o
 OBJS	+= kvm-ipc.o
 OBJS	+= gdb_srv.o
 OBJS	+= gdb_srv_arch.o
+OBJS	+= libkvm-main.o
 
 FLAGS_BFD := $(CFLAGS) -lbfd
 has_bfd := $(call try-cc,$(SOURCE_BFD),$(FLAGS_BFD))
@@ -187,8 +188,8 @@ WARNINGS += -Wwrite-strings
 
 CFLAGS	+= $(WARNINGS)
 
-#all: $(PROGRAM) $(LIBRARY) $(GUEST_INIT)
 all: $(LIBRARY) $(GUEST_INIT)
+#tool: $(PROGRAM) $(LIBRARY) $(GUEST_INIT)
 
 KVMTOOLS-VERSION-FILE:
 	@$(SHELL_PATH) util/KVMTOOLS-VERSION-GEN $(OUTPUT)

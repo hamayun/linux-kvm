@@ -221,7 +221,6 @@ static void callback_mmio_table(u64 addr, u8 *data, u32 len, u8 is_write, void *
 {
 	struct virtio_pci *vpci = ptr;
 	void *table = &vpci->msix_table;
-        printf("callback_mmio_table called\n");
 	if (is_write)
 		memcpy(table + addr - vpci->msix_io_block, data, len);
 	else
@@ -232,7 +231,6 @@ static void callback_mmio_pba(u64 addr, u8 *data, u32 len, u8 is_write, void *pt
 {
 	struct virtio_pci *vpci = ptr;
 	void *pba = &vpci->msix_pba;
-        printf("callback_mmio_pba called\n");
 	if (is_write)
 		memcpy(pba + addr - vpci->msix_pba_block, data, len);
 	else
