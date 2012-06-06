@@ -381,17 +381,8 @@ int kvm_arch_handle_debug(CPUState * env)
         ret = EXCP_DEBUG;
     }
 
-    if (ret == 0) {
-        kvm_cpu_synchronize_state(env);
-        //if(p_kvm_cpu->exception_injected != -1)
-        //    die_perror("GDB Server: p_kvm_cpu->exception_injected != -1\n");
-
-        /* pass to guest */
-        env->exception_injected = arch_info->exception;
-        env->has_error_code = 0;
-    }
-    else{
-        /* We got something to handle; call gdb server */
+    if (ret){
+        /* We got something to handle; call the gdb server */
         gdb_srv_handle_debug(env);
     }
 

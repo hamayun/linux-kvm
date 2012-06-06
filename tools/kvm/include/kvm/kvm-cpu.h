@@ -1,7 +1,7 @@
 #ifndef KVM__KVM_CPU_H
 #define KVM__KVM_CPU_H
 
-#include <linux/kvm.h>	/* for struct kvm_regs */
+#include <linux/kvm.h>    /* for struct kvm_regs */
 
 #include <pthread.h>
 #include <defs_imported.h>
@@ -9,55 +9,26 @@
 struct kvm;
 
 struct kvm_cpu {
-	pthread_t		thread;		/* VCPU thread */
-
+	pthread_t           thread;     /* VCPU thread */
 	unsigned long		cpu_id;
 
-	struct kvm		*kvm;		/* parent KVM */
-	int			vcpu_fd;	/* For VCPU ioctls() */
-	struct kvm_run		*kvm_run;
+	struct kvm         *kvm;        /* parent KVM */
+	int                 vcpu_fd;    /* For VCPU ioctls() */
+	struct kvm_run	   *kvm_run;
 
 	struct kvm_regs		regs;
 	struct kvm_sregs	sregs;
 	struct kvm_fpu		fpu;
+	struct kvm_msrs	   *msrs;       /* dynamically allocated */
+	target_ulong        dr[8];      /* debug registers */
 
-	struct kvm_msrs		*msrs;		/* dynamically allocated */
-
-	u8			is_running;
-	u8			paused;
+	u8                  is_running;
+	u8                  paused;
 
 	struct kvm_coalesced_mmio_ring	*ring;
 
     CPUWatchpoint * watchpoint_hit;
-
-    /* For KVM */
-//    uint32_t mp_state;
-    int32_t exception_injected;
-/*
-    int32_t interrupt_injected;
-    uint8_t soft_interrupt;
-*/
-    uint8_t has_error_code;
-/*
-    uint32_t sipi_vector;
-    uint32_t cpuid_kvm_features;
-    uint32_t cpuid_svm_features;
-    bool tsc_valid;
-    int tsc_khz;
- */
     int kvm_vcpu_dirty;
-
-    /* exception/interrupt handling */
-    //int error_code;
-    //int exception_is_int;
-    //target_ulong exception_next_eip;
-    target_ulong dr[8]; /* debug registers */
-    /*
-    union {
-        CPUBreakpoint *cpu_breakpoint[4];
-        CPUWatchpoint *cpu_watchpoint[4];
-    };*/ /* break/watchpoints for dr[0..3] */
-
     struct kvm_cpu *next_cpu;
 };
 
