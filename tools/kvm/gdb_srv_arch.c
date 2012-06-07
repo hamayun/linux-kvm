@@ -234,6 +234,45 @@ static void kvm_arch_remove_all_hw_breakpoints(void)
     nb_hw_breakpoint = 0;
 }
 
+static int kvm_has_vcpu_events(CPUState *env)
+{   
+    return env->kvm->vcpu_events;
+}   
+    
+static int kvm_has_robust_singlestep(CPUState *env) 
+{           
+    return env->kvm->robust_singlestep;
+}
+
+static int kvm_guest_debug_workarounds(CPUState *env)
+{
+    int ret = 0;
+    unsigned long reinject_trap = 0;
+
+    if (!kvm_has_vcpu_events(env)) {
+        if (env->exception_injected == 1) {
+            reinject_trap = KVM_GUESTDBG_INJECT_DB;
+        } else if (env->exception_injected == 3) {
+            reinject_trap = KVM_GUESTDBG_INJECT_BP;
+        }
+        env->exception_injected = -1;
+    }
+
+    /*
+     * Kernels before KVM_CAP_X86_ROBUST_SINGLESTEP overwrote flags.TF
+     * injected via SET_GUEST_DEBUG while updating GP regs. Work around this
+     * by updating the debug state once again if single-stepping is on.
+     * Another reason to call kvm_update_guest_debug here is a pending debug
+     * trap raise by the guest. On kernels without SET_VCPU_EVENTS we have to
+     * reinject them via SET_GUEST_DEBUG.
+     */
+    if (reinject_trap ||
+        (!kvm_has_robust_singlestep(env) && (env->kvm->sw_single_step > 0))) {
+        ret = kvm_update_guest_debug(env, reinject_trap);
+    }
+    return ret;
+}
+
 int kvm_arch_get_registers(CPUState *env)
 {
     int ret;
@@ -286,11 +325,10 @@ int kvm_arch_put_registers(CPUState *env)
     }
 
     /* must be last */
-    /*
     ret = kvm_guest_debug_workarounds(env);
     if (ret < 0) {
         return ret;
-    }*/
+    }
 
     DPRINTF2(" ... OK\n");
     return 0;

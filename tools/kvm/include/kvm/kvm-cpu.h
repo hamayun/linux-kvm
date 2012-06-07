@@ -29,6 +29,7 @@ struct kvm_cpu {
 
     CPUWatchpoint * watchpoint_hit;
     int kvm_vcpu_dirty;
+    int32_t exception_injected;
     struct kvm_cpu *next_cpu;
 };
 

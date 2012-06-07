@@ -461,10 +461,17 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 	if (ret < 0)
 		die_perror("KVM_CREATE_PIT2 ioctl");
 
+    kvm->vcpu_events = kvm__supports_extension(kvm, KVM_CAP_VCPU_EVENTS);
+    if(!kvm->vcpu_events)
+        pr_warning("KVM Does Not have VCPU Events");
+
     kvm->robust_singlestep = kvm__supports_extension(kvm, KVM_CAP_X86_ROBUST_SINGLESTEP);
-    //if(kvm->robust_singlestep) printf("KVM has Robust Single Step\n");
+    if(!kvm->robust_singlestep)
+        pr_warning("KVM Does Not have Robust Single Step");
 
     kvm->debugregs         = kvm__supports_extension(kvm, KVM_CAP_DEBUGREGS);
+    if(!kvm->debugregs)
+        pr_warning("KVM Does Not support Debug Registers");
 
 	kvm->ram_size		= ram_size;
 

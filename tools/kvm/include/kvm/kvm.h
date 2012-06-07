@@ -61,6 +61,7 @@ struct kvm {
     // For GDB Server
     struct kvm_cpu               *first_cpu;
     int                           sw_single_step;     /* how many instructions to single step ? */
+    int                           vcpu_events;
     int                           robust_singlestep;  /* does kvm support robust single step ? for info only */
     bool                          enable_debug_mode;
     int                           debugregs;
