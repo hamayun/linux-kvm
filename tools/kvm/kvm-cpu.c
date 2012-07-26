@@ -119,7 +119,9 @@ struct kvm_cpu *kvm_cpu__init(struct kvm *kvm, unsigned long cpu_id)
 		vcpu->ring = (void *)vcpu->kvm_run + (coalesced_offset * PAGE_SIZE);
 
 	vcpu->is_running = true;
+    vcpu->queued_work_size = 0;
 
+	printf("Done VCPU # %ld\n", cpu_id);
 	return vcpu;
 }
 
@@ -491,6 +493,53 @@ void kvm_cpu__reboot(void)
 			pthread_kill(kvm_cpus[i]->thread, SIGKVMEXIT);
 }
 
+int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset)
+{
+    struct kvm_signal_mask *sigmask;
+    int r;
+
+    if (!sigset) {
+        return ioctl(env->vcpu_fd, KVM_SET_SIGNAL_MASK, NULL);
+    }
+
+    sigmask = malloc(sizeof(*sigmask) + sizeof(*sigset));
+
+    sigmask->len = 8;
+    memcpy(sigmask->sigset, sigset, sizeof(*sigset));
+    r = ioctl(env->vcpu_fd, KVM_SET_SIGNAL_MASK, sigmask);
+    free(sigmask);
+
+    return r;
+}
+
+static void dummy_signal(int sig)
+{
+//    printf("Dummy Signal Handler\n");
+}
+
+static void qemu_kvm_init_cpu_signals(CPUState *env)
+{
+    int r;
+    sigset_t set;
+    struct sigaction sigact;
+
+    memset(&sigact, 0, sizeof(sigact));
+    sigact.sa_handler = dummy_signal;
+    sigaction(SIG_IPI, &sigact, NULL);
+
+    pthread_sigmask(SIG_BLOCK, NULL, &set);
+    sigdelset(&set, SIG_IPI);
+    //sigdelset(&set, SIGBUS);
+    r = kvm_set_signal_mask(env, &set);
+    if (r) {
+        fprintf(stderr, "kvm_set_signal_mask: %s\n", strerror(-r));
+        exit(1);
+    }
+}
+
+extern pthread_mutex_t qemu_global_mutex;
+extern pthread_cond_t qemu_work_cond;
+
 int kvm_cpu__start(struct kvm_cpu *cpu)
 {
 	sigset_t sigset;
@@ -502,6 +551,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 
 	signal(SIGKVMEXIT, kvm_cpu_signal_handler);
 	signal(SIGKVMPAUSE, kvm_cpu_signal_handler);
+
+    qemu_kvm_init_cpu_signals(cpu);
+    qemu_mutex_lock(&qemu_global_mutex);
 
 	kvm_cpu__setup_cpuid(cpu);
 	kvm_cpu__reset_vcpu(cpu);
@@ -522,7 +574,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
             cpu->kvm_vcpu_dirty = 0;
         }
 
+        qemu_mutex_unlock(&qemu_global_mutex);
         kvm_cpu__run(cpu);
+        qemu_mutex_lock(&qemu_global_mutex);
 
 		switch (cpu->kvm_run->exit_reason)
         {
@@ -575,6 +629,10 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 			goto panic_kvm;
 		}
 		kvm_cpu__handle_coalesced_mmio(cpu);
+
+        qemu_kvm_wait_io_event(cpu);
+        //flush_queued_work(cpu);
+        //cpu->thread_kicked = false;
 	}
 
 exit_kvm:

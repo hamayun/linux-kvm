@@ -68,6 +68,8 @@ struct kvm {
 
     struct kvm_sw_breakpoint_head kvm_sw_breakpoints;
     struct GDBState              *m_gdb;
+
+    bool                          irqchip_in_kernel;
 };
 
 void kvm__set_dir(const char *fmt, ...);

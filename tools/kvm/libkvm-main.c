@@ -629,7 +629,8 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
             kernel_filename, ram_size / 1024 / 1024, nrcpus, guest_name);
 
     if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename,
-       "/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/bin/KVMx86BootLoader.bin"))
+//       "/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/bin/KVMx86BootLoader.bin"))
+       "/home/hamayun/workspace/NaSiK/sw/apes-components/boot/16/bin/setup.bin"))
         die("unable to load bootloader or elf kernel");
 
 	kvm->vmlinux	    = vmlinux_filename;

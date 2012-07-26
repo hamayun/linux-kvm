@@ -8,6 +8,9 @@ int kvm_arch_get_registers(CPUState *env);
 int kvm_arch_put_registers(CPUState *env);
 
 int kvm_cpu_synchronize_state(CPUState *env);
+void qemu_cond_init(pthread_cond_t *cond);
+void qemu_mutex_init(pthread_mutex_t *mutex);
+void qemu_kvm_wait_io_event(CPUState *env);
 int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap);
 
 int kvm_arch_handle_debug(CPUState * env);

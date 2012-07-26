@@ -23,6 +23,16 @@ typedef uint32_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
 #define BP_GDB                0x10
 #define BP_CPU                0x20
 
+#define SIG_IPI SIGUSR1
+
+/* work queue */
+struct qemu_work_item {
+    struct qemu_work_item *next;
+    void (*func)(void *data);
+    void *data;
+    int done;
+};
+
 struct kvm_sw_breakpoint {
     target_ulong pc;
     target_ulong saved_insn;

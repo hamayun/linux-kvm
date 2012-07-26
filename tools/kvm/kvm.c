@@ -417,6 +417,9 @@ int kvm__max_cpus(struct kvm *kvm)
 	return ret;
 }
 
+extern pthread_mutex_t qemu_global_mutex;
+extern pthread_cond_t qemu_work_cond;
+
 struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 {
 	struct kvm_pit_config pit_config = { .flags = 0, };
@@ -496,7 +499,11 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 	if (ret < 0)
 		die_perror("KVM_CREATE_IRQCHIP ioctl");
 
+    kvm->irqchip_in_kernel = true;
 	kvm->name = name;
+
+    qemu_cond_init(&qemu_work_cond);
+    qemu_mutex_init(&qemu_global_mutex);
 
 	//kvm_ipc__start(kvm__create_socket(kvm));
 	//kvm_ipc__register_handler(KVM_IPC_PID, kvm__pid);
@@ -532,6 +539,7 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 
 	kvm->boot_selector	= BOOT_LOADER_SELECTOR;
 	kvm->boot_ip		= BOOT_LOADER_IP;
+    //kvm->boot_ip		= BOOT_LOADER_IP + 0x200;
 	kvm->boot_sp		= BOOT_LOADER_SP;
 
 	return true;
@@ -539,7 +547,7 @@ static int load_flat_binary(struct kvm *kvm, int fd)
 
 static int load_elf_binary(struct kvm *kvm, int fd)
 {
-    char *section_copy[] = {(char *) ".init", (char *) ".text", (char *) ".data", (char *) ".rodata",
+    char *section_copy[] = {(char *) ".reset", (char *) ".init", (char *) ".text", (char *) ".data", (char *) ".rodata",
                             (char *) ".bstext", (char *) ".bsdata", (char *) ".header", (char *) ".entrytext",
                             (char *) ".inittext", (char *) ".initdata", (char *) ".text32", (char *) ".signature",
                             (char *) ".rodata.str1.1", (char *) ".os_config", (char *) ".hal", (char *) ".note", (char *) ""};

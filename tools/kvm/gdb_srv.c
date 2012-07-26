@@ -690,10 +690,10 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
         type = *p++;
         thread = strtoull(p, (char **)&p, 16);
         if (thread == -1 || thread == 0) {
-            DPRINTF("Set Thread ... %d\n", thread);
             if (type == 'c')
                 s->c_cpu = NULL;
             put_packet(s, "OK");
+            DPRINTF("Set Thread ... %d, type %c, breaking\n", thread, type);
             break;
         }
         env = find_cpu(s, thread);
@@ -701,14 +701,15 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
             put_packet(s, "E22");
             break;
         }
+
+        DPRINTF("Set Thread ... %d, type %c\n", thread, type);
+
         switch (type) {
         case 'c':
-            DPRINTF("Set Thread ... %d, type 'c'\n", thread);
             s->c_cpu = env;
             put_packet(s, "OK");
             break;
         case 'g':
-            DPRINTF("Set Thread ... %d, type 'g'\n", thread);
             s->g_cpu = env;
             put_packet(s, "OK");
             break;

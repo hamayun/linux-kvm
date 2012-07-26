@@ -31,6 +31,11 @@ struct kvm_cpu {
     int kvm_vcpu_dirty;
     int32_t exception_injected;
     struct kvm_cpu *next_cpu;
+
+    pthread_cond_t halt_cond;
+    int thread_kicked;
+    struct qemu_work_item *queued_work_first, *queued_work_last;
+    int queued_work_size;
 };
 
 typedef struct kvm_cpu CPUState;
