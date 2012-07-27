@@ -503,7 +503,6 @@ int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset)
     }
 
     sigmask = malloc(sizeof(*sigmask) + sizeof(*sigset));
-
     sigmask->len = 8;
     memcpy(sigmask->sigset, sigset, sizeof(*sigset));
     r = ioctl(env->vcpu_fd, KVM_SET_SIGNAL_MASK, sigmask);
@@ -529,7 +528,7 @@ static void qemu_kvm_init_cpu_signals(CPUState *env)
 
     pthread_sigmask(SIG_BLOCK, NULL, &set);
     sigdelset(&set, SIG_IPI);
-    //sigdelset(&set, SIGBUS);
+    sigdelset(&set, SIGBUS);
     r = kvm_set_signal_mask(env, &set);
     if (r) {
         fprintf(stderr, "kvm_set_signal_mask: %s\n", strerror(-r));
@@ -552,8 +551,8 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 	signal(SIGKVMEXIT, kvm_cpu_signal_handler);
 	signal(SIGKVMPAUSE, kvm_cpu_signal_handler);
 
-    qemu_kvm_init_cpu_signals(cpu);
     qemu_mutex_lock(&qemu_global_mutex);
+    qemu_kvm_init_cpu_signals(cpu);
 
 	kvm_cpu__setup_cpuid(cpu);
 	kvm_cpu__reset_vcpu(cpu);
@@ -575,7 +574,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
         }
 
         qemu_mutex_unlock(&qemu_global_mutex);
+ //       printf("%s: CPU#%d Enter Guest Mode\n", __func__, cpu->cpu_id);
         kvm_cpu__run(cpu);
+//        printf("%s: CPU#%d Exit  Guest Mode\n", __func__, cpu->cpu_id);
         qemu_mutex_lock(&qemu_global_mutex);
 
 		switch (cpu->kvm_run->exit_reason)
@@ -628,11 +629,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		default:
 			goto panic_kvm;
 		}
-		kvm_cpu__handle_coalesced_mmio(cpu);
 
+		kvm_cpu__handle_coalesced_mmio(cpu);
         qemu_kvm_wait_io_event(cpu);
-        //flush_queued_work(cpu);
-        //cpu->thread_kicked = false;
 	}
 
 exit_kvm:

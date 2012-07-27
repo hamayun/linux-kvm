@@ -510,6 +510,11 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 	return kvm;
 }
 
+bool kvm_irqchip_in_kernel(struct kvm * kvm)
+{
+    return (kvm->irqchip_in_kernel);
+}
+
 #define BOOT_LOADER_SELECTOR	0x0000
 #define BOOT_LOADER_IP		0x7C00
 
