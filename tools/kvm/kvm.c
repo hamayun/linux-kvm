@@ -1039,6 +1039,8 @@ void kvm__notify_paused(void)
 {
 	u64 p = 1;
 
+	printf("Inside %s\n", __func__);
+
 	if (write(pause_event, &p, sizeof(p)) < 0)
 		die("Failed notifying of paused VCPU.");
 

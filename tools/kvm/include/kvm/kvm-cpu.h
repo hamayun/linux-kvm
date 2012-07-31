@@ -24,6 +24,7 @@ struct kvm_cpu {
 
 	u8                  is_running;
 	u8                  paused;
+    volatile u8         stopped;
 
 	struct kvm_coalesced_mmio_ring	*ring;
 

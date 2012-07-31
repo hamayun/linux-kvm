@@ -64,6 +64,7 @@ typedef struct GDBState {
 int gdb_srv_init (struct kvm * p_kvm);
 int gdb_srv_start_and_wait (struct kvm *p_kvm, int port);
 int gdb_srv_handle_debug(CPUState * env);
+void gdb_set_stop_cpu(CPUState *env);
 int gdb_srv_start_debug (void);
 
 #endif

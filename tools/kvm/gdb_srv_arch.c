@@ -274,12 +274,30 @@ static int kvm_guest_debug_workarounds(CPUState *env)
     return ret;
 }
 
+static int qemu_thread_is_self(pthread_t thread)
+{
+   return pthread_equal(pthread_self(), thread);
+}
+
+static int qemu_cpu_is_self(void *_env)
+{
+    CPUState *env = _env;
+
+    return qemu_thread_is_self(env->thread);
+}
+
 int kvm_arch_get_registers(CPUState *env)
 {
     int ret;
+/*
+    if(!(cpu_is_stopped(env) || qemu_cpu_is_self(env)))
+    {
+        fprintf(stderr, "%s: CPU#%d (%s) Must be Stopped\n",
+                __func__, env->cpu_id, (qemu_cpu_is_self(env) == 0? "Not Self":"Self"));
+        while(1);
+    }
+*/
     DPRINTF("kvm_arch_get_registers\n");
-    //if(!(cpu_is_stopped(env)))
-    //    die_perror("CPU Must be Stopped\n");
 
     ret = kvm_cpu__get_regs(env);
     if (ret < 0) {
@@ -300,10 +318,14 @@ int kvm_arch_get_registers(CPUState *env)
 int kvm_arch_put_registers(CPUState *env)
 {
     int ret;
-
-    //if(!(cpu_is_stopped(env)))
-    //    die_perror("CPU Must be Stopped\n");
-
+/*
+    if(!(cpu_is_stopped(env) || qemu_cpu_is_self(env)))
+    {
+        fprintf(stderr, "%s: CPU#%d (%s) Must be Stopped\n",
+                __func__, env->cpu_id, (qemu_cpu_is_self(env) == 0? "Not Self":"Self"));
+        while(1);
+    }
+*/
     DPRINTF("kvm_arch_put_registers");
 
     ret = kvm_cpu__put_regs(env);
@@ -374,6 +396,8 @@ int kvm_arch_handle_debug(CPUState * env)
     int n;
 
     DPRINTF("%s: [CPU # %d]\n", __func__, (uint32_t) env->cpu_id);
+
+    gdb_set_stop_cpu(env);
 
     if (arch_info->exception == 1) {
         if (arch_info->dr6 & (1 << 14)) {
@@ -467,18 +491,6 @@ static void kvm_invoke_set_guest_debug(void *data)
 
     dbg_data->err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &dbg_data->dbg);
     printf("%s: IOCTL for CPU#%d ... Done\n", __func__, (uint32_t) env->cpu_id);
-}
-
-static int qemu_thread_is_self(pthread_t thread)
-{
-   return pthread_equal(pthread_self(), thread);
-}
-
-static int qemu_cpu_is_self(void *_env)
-{
-    CPUState *env = _env;
-
-    return qemu_thread_is_self(env->thread);
 }
 
 static void qemu_cpu_kick_thread(CPUState *env)
@@ -594,10 +606,13 @@ static bool cpu_thread_is_idle(CPUState *env)
     //if (env->queued_work_size > 0) {
         return false;
     }
-    if (env->paused) {
+
+    /*
+    if (env->stopped) {
         return true;
-    }
-    if (!env->paused || env->kvm->irqchip_in_kernel) {
+    }*/
+
+    if (!env->stopped || kvm_irqchip_in_kernel(env->kvm)) {
         return false;
     }
     return true;
@@ -740,6 +755,7 @@ static void flush_queued_work(CPUState *env)
 
     env->queued_work_last = NULL;
     printf("%s: qemu_cond_broadcast @qemu_work_cond\n", __func__);
+    //env->stopped = 0;
     qemu_cond_broadcast(&qemu_work_cond);
 }
 
@@ -748,13 +764,13 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
     struct qemu_work_item wi;
 
     if (qemu_cpu_is_self(env)) {
-        printf("%s: CPU is Self\n", __func__);
+        printf("%s: CPU#%d is Self\n", __func__, env->cpu_id);
         func(data);
         return;
     }
     else
     {
-        printf("%s: CPU is NOT Self\n", __func__);
+        printf("%s: CPU#%d is NOT Self\n", __func__, env->cpu_id);
     }
 
     wi.func = func;
@@ -772,15 +788,14 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
     wi.done = false;
 
     env->queued_work_size++;
+    //env->stopped = 1;
+
     printf("###### %s: CPU#%d, queued_work_size = %d\n", __func__, env->cpu_id, env->queued_work_size);
     qemu_cpu_kick(env);
 
     while (!wi.done) {
-        //CPUState *self_env = cpu_single_env;
-
         printf("%s: Kicked CPU#%d ... Waiting on qemu_work_cond\n", __func__, env->cpu_id);
         qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
-        //cpu_single_env = self_env;
     }
     printf("%s: Finished waiting on qemu_work_cond\n", __func__);
 }

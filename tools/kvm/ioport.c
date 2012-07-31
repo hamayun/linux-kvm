@@ -157,7 +157,7 @@ static const char *to_direction(int direction)
 
 static void ioport_error(u16 port, void *data, int direction, int size, u32 count)
 {
-	fprintf(stderr, "IO error: %s port=%x, size=%d, count=%u\n", to_direction(direction), port, size, count);
+	fprintf(stderr, "IO error: %s port=0x%x, size=%d, count=%u\n", to_direction(direction), port, size, count);
 }
 
 bool kvm__emulate_io(struct kvm *kvm, u16 port, void *data, int direction, int size, u32 count)

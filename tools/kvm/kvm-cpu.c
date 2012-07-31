@@ -536,6 +536,19 @@ static void qemu_kvm_init_cpu_signals(CPUState *env)
     }
 }
 
+static int cpu_can_run(CPUState *env)
+{
+    if (env->stopped) {
+        return 0;
+    }
+    return 1;
+}
+
+int cpu_is_stopped(CPUState *env)
+{
+    return env->stopped;
+}
+
 extern pthread_mutex_t qemu_global_mutex;
 extern pthread_cond_t qemu_work_cond;
 
@@ -563,6 +576,8 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
     }
 
     while (cpu->is_running) {
+      //if(cpu_can_run(cpu))
+      {
 		if (cpu->paused) {
 			kvm__notify_paused();
 			cpu->paused = 0;
@@ -573,8 +588,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
             cpu->kvm_vcpu_dirty = 0;
         }
 
+        qemu_kvm_wait_io_event(cpu);
         qemu_mutex_unlock(&qemu_global_mutex);
- //       printf("%s: CPU#%d Enter Guest Mode\n", __func__, cpu->cpu_id);
+//        printf("%s: CPU#%d Enter Guest Mode\n", __func__, cpu->cpu_id);
         kvm_cpu__run(cpu);
 //        printf("%s: CPU#%d Exit  Guest Mode\n", __func__, cpu->cpu_id);
         qemu_mutex_lock(&qemu_global_mutex);
@@ -586,7 +602,9 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
             //        cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), (unsigned int)(cpu->kvm_run->fail_entry));
             break;
 		case KVM_EXIT_DEBUG:
+            //cpu->stopped = 1;
             kvm_arch_handle_debug(cpu);
+            //cpu->stopped = 0;
             //kvm_cpu__show_registers(cpu);
             //kvm_cpu__show_code(cpu);
             break;
@@ -631,8 +649,10 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		}
 
 		kvm_cpu__handle_coalesced_mmio(cpu);
-        qemu_kvm_wait_io_event(cpu);
-	}
+  	  }
+
+      //qemu_kvm_wait_io_event(cpu);
+    }
 
 exit_kvm:
 	return 0;

@@ -788,6 +788,12 @@ static int gdb_handle_packet (struct GDBState *s, const char *line_buf)
     return RS_IDLE;
 }
 
+void gdb_set_stop_cpu(CPUState *env)
+{
+    env->kvm->m_gdb->c_cpu = env;
+    env->kvm->m_gdb->g_cpu = env;
+}
+
 static void gdb_read_byte(GDBState *s, int ch)
 {
     int                 i, csum;

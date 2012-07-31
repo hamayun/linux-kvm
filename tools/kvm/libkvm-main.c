@@ -475,7 +475,8 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     // Also consider modifying the node maps for device type; Input/Output or Output only.
     // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
 
-    kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
+    //kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL); // Causes some problems in Printing to TTY
+    kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
     kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_systemc_mmio_handler, NULL);
 
     kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_systemc_mmio_handler, NULL);
@@ -629,8 +630,8 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
             kernel_filename, ram_size / 1024 / 1024, nrcpus, guest_name);
 
     if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename,
-//       "/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/bin/KVMx86BootLoader.bin"))
-       "/home/hamayun/workspace/NaSiK/sw/apes-components/boot/16/bin/setup.bin"))
+       "/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/bin/KVMx86BootLoader.bin"))
+//       "/home/hamayun/workspace/NaSiK/sw/apes-components/boot/16/bin/setup.bin"))
         die("unable to load bootloader or elf kernel");
 
 	kvm->vmlinux	    = vmlinux_filename;
