@@ -375,8 +375,7 @@ static u64 get_ram_size(int nr_cpus)
 	u64 ram_size;
 
     //ram_size	= 64 * (nr_cpus + 3);
-    //ram_size	= 128;
-    ram_size	= 128 + (nr_cpus * 2);
+    ram_size	= 256;
 
 	available	= host_ram_size() * RAM_SIZE_RATIO;
 	if (!available)

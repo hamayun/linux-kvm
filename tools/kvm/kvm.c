@@ -424,7 +424,7 @@ extern pthread_cond_t kvm_work_cond;
 
 struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 {
-	struct kvm_pit_config pit_config = { .flags = 0, };
+	struct kvm_pit_config pit_config = { .flags = KVM_PIT_SPEAKER_DUMMY, };
 	struct kvm *kvm;
 	int ret;
 
