@@ -138,7 +138,7 @@ static struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ul
 {
     struct kvm_sw_breakpoint *bp;
 
-    QTAILQ_FOREACH(bp, &env->kvm->kvm_sw_breakpoints, entry) {
+    KTAILQ_FOREACH(bp, &env->kvm->kvm_sw_breakpoints, entry) {
         if (bp->pc == pc) {
             return bp;
         }
@@ -148,7 +148,7 @@ static struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env, target_ul
 
 static int kvm_sw_breakpoints_active(CPUState *env)
 {
-    return !QTAILQ_EMPTY(&env->kvm->kvm_sw_breakpoints);
+    return !KTAILQ_EMPTY(&env->kvm->kvm_sw_breakpoints);
 }
 
 static int find_hw_breakpoint(target_ulong addr, int len, int type)
@@ -274,26 +274,26 @@ static int kvm_guest_debug_workarounds(CPUState *env)
     return ret;
 }
 
-static int qemu_thread_is_self(pthread_t thread)
+static int kvm_thread_is_self(pthread_t thread)
 {
    return pthread_equal(pthread_self(), thread);
 }
 
-static int qemu_cpu_is_self(void *_env)
+static int kvm_cpu_is_self(void *_env)
 {
     CPUState *env = _env;
 
-    return qemu_thread_is_self(env->thread);
+    return kvm_thread_is_self(env->thread);
 }
 
 int kvm_arch_get_registers(CPUState *env)
 {
     int ret;
 /*
-    if(!(cpu_is_stopped(env) || qemu_cpu_is_self(env)))
+    if(!(cpu_is_stopped(env) || kvm_cpu_is_self(env)))
     {
         fprintf(stderr, "%s: CPU#%d (%s) Must be Stopped\n",
-                __func__, env->cpu_id, (qemu_cpu_is_self(env) == 0? "Not Self":"Self"));
+                __func__, env->cpu_id, (kvm_cpu_is_self(env) == 0? "Not Self":"Self"));
         while(1);
     }
 */
@@ -319,10 +319,10 @@ int kvm_arch_put_registers(CPUState *env)
 {
     int ret;
 /*
-    if(!(cpu_is_stopped(env) || qemu_cpu_is_self(env)))
+    if(!(cpu_is_stopped(env) || kvm_cpu_is_self(env)))
     {
         fprintf(stderr, "%s: CPU#%d (%s) Must be Stopped\n",
-                __func__, env->cpu_id, (qemu_cpu_is_self(env) == 0? "Not Self":"Self"));
+                __func__, env->cpu_id, (kvm_cpu_is_self(env) == 0? "Not Self":"Self"));
         while(1);
     }
 */
@@ -490,10 +490,10 @@ static void kvm_invoke_set_guest_debug(void *data)
     CPUState *env = dbg_data->env;
 
     dbg_data->err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &dbg_data->dbg);
-    printf("%s: IOCTL for CPU#%d ... Done\n", __func__, (uint32_t) env->cpu_id);
+    DPRINTF("%s: IOCTL for CPU#%d ... Done\n", __func__, (uint32_t) env->cpu_id);
 }
 
-static void qemu_cpu_kick_thread(CPUState *env)
+static void kvm_cpu_kick_thread(CPUState *env)
 {
     int err;
 
@@ -504,34 +504,22 @@ static void qemu_cpu_kick_thread(CPUState *env)
     }
 }
 
-static void qemu_cond_broadcast(pthread_cond_t *cond)
-{
-    int err;
+pthread_mutex_t kvm_global_mutex;
+pthread_cond_t kvm_work_cond;
 
-    err = pthread_cond_broadcast(cond);
-    if (err)
-    {
-        printf("Error: In pthread_cond_broadcast()");
-        return;
-    }
-}
-
-pthread_mutex_t qemu_global_mutex;
-pthread_cond_t qemu_work_cond;
-
-static void qemu_cpu_kick(void *_env)
+static void kvm_cpu_kick(void *_env)
 {
     CPUState *env = _env;
 
-    printf("%s: Calling qemu_cond_broadcast (halt_cond) ... (CPU#%d)\n", __func__, env->cpu_id);
-    qemu_cond_broadcast(&env->halt_cond);
+    DPRINTF("%s: Calling kvm_cond_broadcast (halt_cond) ... (CPU#%d)\n", __func__, (uint32_t) env->cpu_id);
+    kvm_cond_broadcast(&env->halt_cond);
     if (!env->thread_kicked) {
-        qemu_cpu_kick_thread(env);
+        kvm_cpu_kick_thread(env);
         env->thread_kicked = true;
     }
 }
 
-void qemu_cond_init(pthread_cond_t *cond)
+void kvm_cond_init(pthread_cond_t *cond)
 {
     int err;
 
@@ -543,47 +531,7 @@ void qemu_cond_init(pthread_cond_t *cond)
     }
 }
 
-void qemu_mutex_init(pthread_mutex_t *mutex)
-{
-    int err;
-    pthread_mutexattr_t mutexattr;
-
-    pthread_mutexattr_init(&mutexattr);
-    pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
-    err = pthread_mutex_init(mutex, &mutexattr);
-    pthread_mutexattr_destroy(&mutexattr);
-    if (err)
-    {
-        fprintf(stderr, "%s: Error in pthread_mutex_init\n", __func__);
-        exit(1);
-    }
-}
-
-void qemu_mutex_lock(pthread_mutex_t *mutex)
-{
-    int err;
-
-    err = pthread_mutex_lock(mutex);
-    if (err)
-    {
-        fprintf(stderr, "%s: Error in pthread_mutex_lock\n", __func__);
-        exit(1);
-    }
-}
-
-void qemu_mutex_unlock(pthread_mutex_t *mutex)
-{
-    int err;
-
-    err = pthread_mutex_unlock(mutex);
-    if (err)
-    {
-        fprintf(stderr, "%s: Error in pthread_mutex_unlock\n", __func__);
-        exit(1);
-    }
-}
-
-static void qemu_cond_wait(pthread_cond_t *cond, pthread_mutex_t *lock)
+void kvm_cond_wait(pthread_cond_t *cond, pthread_mutex_t *lock)
 {
     int err;
 
@@ -600,146 +548,79 @@ static void qemu_cond_wait(pthread_cond_t *cond, pthread_mutex_t *lock)
 
 }
 
+void kvm_cond_broadcast(pthread_cond_t *cond)
+{
+    int err;
+
+    err = pthread_cond_broadcast(cond);
+    if (err)
+    {
+        printf("Error: In pthread_cond_broadcast()");
+        return;
+    }
+}
+
+void kvm_mutex_init(pthread_mutex_t *mutex)
+{
+    int err;
+    pthread_mutexattr_t mutexattr;
+
+    pthread_mutexattr_init(&mutexattr);
+    pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
+    err = pthread_mutex_init(mutex, &mutexattr);
+    pthread_mutexattr_destroy(&mutexattr);
+    if (err)
+    {
+        fprintf(stderr, "%s: Error in pthread_mutex_init\n", __func__);
+        exit(1);
+    }
+}
+
+void kvm_mutex_lock(pthread_mutex_t *mutex)
+{
+    int err;
+
+    err = pthread_mutex_lock(mutex);
+    if (err)
+    {
+        fprintf(stderr, "%s: Error in pthread_mutex_lock\n", __func__);
+        exit(1);
+    }
+}
+
+void kvm_mutex_unlock(pthread_mutex_t *mutex)
+{
+    int err;
+
+    err = pthread_mutex_unlock(mutex);
+    if (err)
+    {
+        fprintf(stderr, "%s: Error in pthread_mutex_unlock\n", __func__);
+        exit(1);
+    }
+}
+
+static bool kvm_irqchip_in_kernel(struct kvm * kvm)
+{
+    return (kvm->irqchip_in_kernel);
+}
+
 static bool cpu_thread_is_idle(CPUState *env)
 {
     if (env->queued_work_first) {
-    //if (env->queued_work_size > 0) {
         return false;
     }
 
-    /*
-    if (env->stopped) {
-        return true;
-    }*/
-
-    if (!env->stopped || kvm_irqchip_in_kernel(env->kvm)) {
+    if (kvm_irqchip_in_kernel(env->kvm)) {
         return false;
     }
+
     return true;
 }
 
-#if 0
-static void qemu_kvm_eat_signals(CPUState *env)
-{
-    struct timespec ts = { 0, 0 };
-    siginfo_t siginfo;
-    sigset_t waitset;
-    sigset_t chkset;
-    int r;
-
-    sigemptyset(&waitset);
-    sigaddset(&waitset, SIG_IPI);
-    sigaddset(&waitset, SIGBUS);
-
-    do {
-        r = sigtimedwait(&waitset, &siginfo, &ts);
-        if (r == -1 && !(errno == EAGAIN || errno == EINTR)) {
-            perror("sigtimedwait");
-            exit(1);
-        }
-
-        switch (r) {
-        case SIGBUS:
-            if (kvm_on_sigbus_vcpu(env, siginfo.si_code, siginfo.si_addr)) {
-                sigbus_reraise();
-            }
-            break;
-        default:
-            break;
-        }
-
-        r = sigpending(&chkset);
-        if (r == -1) {
-            perror("sigpending");
-            exit(1);
-        }
-    } while (sigismember(&chkset, SIG_IPI) || sigismember(&chkset, SIGBUS));
-}
-#endif
-
-#if 0 // Dynamic allocations
 static void flush_queued_work(CPUState *env)
 {
-    struct qemu_work_item *wi;
-
-    if (!env->queued_work_first) {
-        return;
-    }
-
-    while ((wi = env->queued_work_first)) {
-        env->queued_work_first = wi->next;
-        wi->func(wi->data);
-        wi->done = true;
-
-        env->queued_work_size--;
-        free(wi->data);
-        free(wi);
-    }
-
-    env->queued_work_last = NULL;
-    qemu_cond_broadcast(&qemu_work_cond);
-}
-
-static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
-{
-    struct qemu_work_item * wi = NULL;
-
-    if (qemu_cpu_is_self(env)) {
-        DPRINTF("%s: CPU is Self\n", __func__);
-        func(data);
-        return;
-    }
-    else
-    {
-        DPRINTF("%s: CPU is NOT Self\n", __func__);
-    }
-
-    wi = (struct qemu_work_item *) malloc(sizeof(struct qemu_work_item));
-    if(!wi)
-    {
-        printf("Error: Allocating Work Item\n");
-        return;
-    }
-
-    wi->data = (struct kvm_set_guest_debug_data *) malloc(sizeof(struct kvm_set_guest_debug_data));
-    if(!wi->data)
-    {
-        printf("Error: Allocating Work Item Data\n");
-        return;
-    }
-
-    wi->func = func;
-    //wi->data = data;
-    memcpy(wi->data, data, sizeof(struct kvm_set_guest_debug_data));
-
-    if (!env->queued_work_first) {
-        env->queued_work_first = wi;
-    } else {
-        env->queued_work_last->next = wi;
-    }
-
-    env->queued_work_last = wi;
-
-    wi->next = NULL;
-    wi->done = false;
-
-    env->queued_work_size++;
-    printf("###### %s: CPU#%d, queued_work_size = %d\n", __func__, env->cpu_id, env->queued_work_size);
-
-    qemu_cpu_kick(env);
-    printf("%s: Kicked CPU#%d\n", __func__, env->cpu_id);
-
-    while (!wi->done) {
-        //CPUState *self_env = cpu_single_env;
-
-        qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
-        //cpu_single_env = self_env;
-    }
-}
-#else
-static void flush_queued_work(CPUState *env)
-{
-    struct qemu_work_item *wi;
+    struct kvm_work_item *wi;
 
     if (!env->queued_work_first) {
         return;
@@ -754,23 +635,22 @@ static void flush_queued_work(CPUState *env)
     }
 
     env->queued_work_last = NULL;
-    printf("%s: qemu_cond_broadcast @qemu_work_cond\n", __func__);
-    //env->stopped = 0;
-    qemu_cond_broadcast(&qemu_work_cond);
+    DPRINTF("%s: kvm_cond_broadcast @kvm_work_cond\n", __func__);
+    kvm_cond_broadcast(&kvm_work_cond);
 }
 
 static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
 {
-    struct qemu_work_item wi;
+    struct kvm_work_item wi;
 
-    if (qemu_cpu_is_self(env)) {
-        printf("%s: CPU#%d is Self\n", __func__, env->cpu_id);
+    if (kvm_cpu_is_self(env)) {
+        DPRINTF("%s: CPU#%d is Self\n", __func__, env->cpu_id);
         func(data);
         return;
     }
     else
     {
-        printf("%s: CPU#%d is NOT Self\n", __func__, env->cpu_id);
+        DPRINTF("%s: CPU#%d is NOT Self\n", __func__, env->cpu_id);
     }
 
     wi.func = func;
@@ -788,78 +668,34 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
     wi.done = false;
 
     env->queued_work_size++;
-    //env->stopped = 1;
 
-    printf("###### %s: CPU#%d, queued_work_size = %d\n", __func__, env->cpu_id, env->queued_work_size);
-    qemu_cpu_kick(env);
+    DPRINTF("###### %s: CPU#%d, queued_work_size = %d\n", __func__, env->cpu_id, env->queued_work_size);
+    kvm_cpu_kick(env);
 
     while (!wi.done) {
-        printf("%s: Kicked CPU#%d ... Waiting on qemu_work_cond\n", __func__, env->cpu_id);
-        qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
+        DPRINTF("%s: Kicked CPU#%d ... Waiting on kvm_work_cond\n", __func__, env->cpu_id);
+        kvm_cond_wait(&kvm_work_cond, &kvm_global_mutex);
     }
-    printf("%s: Finished waiting on qemu_work_cond\n", __func__);
+
+    DPRINTF("%s: Finished waiting on kvm_work_cond\n", __func__);
+    return;
 }
-#endif
 
-static void qemu_wait_io_event_common(CPUState *env)
+static void kvm_wait_io_event_common(CPUState *env)
 {
-    /*
-    if (env->stop) {
-        env->stop = 0;
-        env->stopped = 1;
-        qemu_cond_signal(&qemu_pause_cond);
-    }*/
-
     flush_queued_work(env);
     env->thread_kicked = false;
 }
 
-static void qemu_kvm_eat_signals(CPUState *env)
-{
-    struct timespec ts = { 0, 0 };
-    siginfo_t siginfo;
-    sigset_t waitset;
-    sigset_t chkset;
-    int r;
-
-    sigemptyset(&waitset);
-    sigaddset(&waitset, SIG_IPI);
-    sigaddset(&waitset, SIGBUS);
-
-    do {
-        r = sigtimedwait(&waitset, &siginfo, &ts);
-        if (r == -1 && !(errno == EAGAIN || errno == EINTR)) {
-            perror("sigtimedwait");
-            exit(1);
-        }
-
-        switch (r) {
-        case SIGBUS:
-            //if (kvm_on_sigbus_vcpu(env, siginfo.si_code, siginfo.si_addr)) {
-            //    sigbus_reraise();
-            //}
-            break;
-        default:
-            break;
-        }
-
-        r = sigpending(&chkset);
-        if (r == -1) {
-            perror("sigpending");
-            exit(1);
-        }
-    } while (sigismember(&chkset, SIG_IPI) || sigismember(&chkset, SIGBUS));
-}
-
-void qemu_kvm_wait_io_event(CPUState *env)
+void kvm_wait_io_event(CPUState *env)
 {
     while (cpu_thread_is_idle(env)) {
-        printf("%s: Calling qemu_cond_wait (halt_cond) ... (CPU#%d)\n", __func__, env->cpu_id);
-        qemu_cond_wait(&env->halt_cond, &qemu_global_mutex);
+        printf("%s: Calling kvm_cond_wait (halt_cond) ... (CPU#%d)\n",
+                __func__, (uint32_t) env->cpu_id);
+        kvm_cond_wait(&env->halt_cond, &kvm_global_mutex);
     }
 
-    //qemu_kvm_eat_signals(env);
-    qemu_wait_io_event_common(env);
+    kvm_wait_io_event_common(env);
 }
 
 int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
@@ -876,7 +712,6 @@ int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
     data.env = env;
 
     run_on_cpu(env, kvm_invoke_set_guest_debug, &data);
-    //data.err = ioctl(env->vcpu_fd, KVM_SET_GUEST_DEBUG, &data.dbg);
     return data.err;
 }
 
@@ -910,7 +745,7 @@ int kvm_insert_breakpoint(CPUState *current_env, target_ulong addr,
             return err;
         }
 
-        QTAILQ_INSERT_HEAD(&current_env->kvm->kvm_sw_breakpoints,
+        KTAILQ_INSERT_HEAD(&current_env->kvm->kvm_sw_breakpoints,
                           bp, entry);
     } else {
         err = kvm_arch_insert_hw_breakpoint(addr, len, type);
@@ -955,7 +790,7 @@ int kvm_remove_breakpoint(CPUState *current_env, target_ulong addr,
             return err;
         }
 
-        QTAILQ_REMOVE(&current_env->kvm->kvm_sw_breakpoints, bp, entry);
+        KTAILQ_REMOVE(&current_env->kvm->kvm_sw_breakpoints, bp, entry);
         free(bp);
     } else {
         err = kvm_arch_remove_hw_breakpoint(addr, len, type);
@@ -981,7 +816,7 @@ int kvm_remove_all_breakpoints(CPUState *current_env)
 
     DPRINTF("Remove All S/W Breakpoints\n");
 
-    QTAILQ_FOREACH_SAFE(bp, &kvm->kvm_sw_breakpoints, entry, next) {
+    KTAILQ_FOREACH_SAFE(bp, &kvm->kvm_sw_breakpoints, entry, next) {
         if (kvm_arch_remove_sw_breakpoint(current_env, bp) != 0) {
             /* Try harder to find a CPU that currently sees the breakpoint. */
             for (env = kvm->first_cpu; env != NULL; env = env->next_cpu) {

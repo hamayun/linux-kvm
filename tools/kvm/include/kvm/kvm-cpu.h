@@ -24,7 +24,6 @@ struct kvm_cpu {
 
 	u8                  is_running;
 	u8                  paused;
-    volatile u8         stopped;
 
 	struct kvm_coalesced_mmio_ring	*ring;
 
@@ -35,7 +34,7 @@ struct kvm_cpu {
 
     pthread_cond_t halt_cond;
     int thread_kicked;
-    struct qemu_work_item *queued_work_first, *queued_work_last;
+    struct kvm_work_item *queued_work_first, *queued_work_last;
     int queued_work_size;
 };
 

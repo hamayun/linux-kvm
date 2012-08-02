@@ -375,7 +375,8 @@ static u64 get_ram_size(int nr_cpus)
 	u64 ram_size;
 
     //ram_size	= 64 * (nr_cpus + 3);
-        ram_size	= 128;
+    //ram_size	= 128;
+    ram_size	= 128 + (nr_cpus * 2);
 
 	available	= host_ram_size() * RAM_SIZE_RATIO;
 	if (!available)
@@ -650,8 +651,12 @@ int kvm_run_cpus(void)
 
 	kvm__setup_bios(kvm);
 
+    printf("Initializing KVM VCPUs ... ");
+
 	for (i = 0; i < nrcpus; i++) {
-    	kvm_cpus[i] = kvm_cpu__init(kvm, i);
+        printf("%d  ", i);
+
+        kvm_cpus[i] = kvm_cpu__init(kvm, i);
     	if (!kvm_cpus[i])
         	die("unable to initialize KVM VCPU");
 
@@ -662,6 +667,7 @@ int kvm_run_cpus(void)
 
         kvm_cpus[i]->next_cpu = NULL;
     }
+    printf("\n");
 
 	kvm__init_ram(kvm);
 

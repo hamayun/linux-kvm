@@ -38,6 +38,8 @@
 #include <libelf.h>
 #include <gelf.h>
 
+#include "gdb_srv_arch.h"
+
 #define DEFINE_KVM_EXIT_REASON(reason) [reason] = #reason
 
 const char *kvm_exit_reasons[] = {
@@ -346,7 +348,7 @@ void kvm__init_ram(struct kvm *kvm)
 
 	if (kvm->ram_size < KVM_32BIT_GAP_START) {
 		/* Use a single block of RAM for 32bit RAM */
-                printf("kvm__init_ram: Single Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
+                printf("Initializing RAM: Single Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = kvm->ram_size;
@@ -355,7 +357,7 @@ void kvm__init_ram(struct kvm *kvm)
 		kvm__register_mem(kvm, phys_start, phys_size, host_mem);
 	} else {
 		/* First RAM range from zero to the PCI gap: */
-                printf("kvm__init_ram: Double Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
+                printf("Initializing RAM: Double Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = KVM_32BIT_GAP_START;
@@ -417,8 +419,8 @@ int kvm__max_cpus(struct kvm *kvm)
 	return ret;
 }
 
-extern pthread_mutex_t qemu_global_mutex;
-extern pthread_cond_t qemu_work_cond;
+extern pthread_mutex_t kvm_global_mutex;
+extern pthread_cond_t kvm_work_cond;
 
 struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 {
@@ -431,7 +433,7 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 
 	kvm = kvm__new();
 
-    QTAILQ_INIT(&kvm->kvm_sw_breakpoints);
+    KTAILQ_INIT(&kvm->kvm_sw_breakpoints);
 
 	kvm->sys_fd = open(kvm_dev, O_RDWR);
 	if (kvm->sys_fd < 0) {
@@ -502,17 +504,12 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
     kvm->irqchip_in_kernel = true;
 	kvm->name = name;
 
-    qemu_cond_init(&qemu_work_cond);
-    qemu_mutex_init(&qemu_global_mutex);
+    kvm_cond_init(&kvm_work_cond);
+    kvm_mutex_init(&kvm_global_mutex);
 
 	//kvm_ipc__start(kvm__create_socket(kvm));
 	//kvm_ipc__register_handler(KVM_IPC_PID, kvm__pid);
 	return kvm;
-}
-
-bool kvm_irqchip_in_kernel(struct kvm * kvm)
-{
-    return (kvm->irqchip_in_kernel);
 }
 
 #define BOOT_LOADER_SELECTOR	0x0000

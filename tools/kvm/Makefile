@@ -6,8 +6,8 @@ WERROR=0
 
 ifeq ($(strip $(V)),)
 	E = @echo
-#	Q = @
-	Q =
+	Q = @
+#	Q =
 else
 	E = @\#
 	Q =

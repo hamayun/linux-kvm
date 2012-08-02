@@ -4,7 +4,7 @@
 #define _DEFS_IMPORTED_
 
 #include <inttypes.h>
-#include "qemu-queue.h"     // taken from qemu-kvm
+#include "kvm-queue.h"     // taken from qemu-kvm (qemu-queue.h)
 
 #define TARGET_LONG_ALIGNMENT 4
 #define TARGET_LONG_BITS 32
@@ -26,8 +26,8 @@ typedef uint32_t target_ulong __attribute__((aligned(TARGET_LONG_ALIGNMENT)));
 #define SIG_IPI SIGUSR1
 
 /* work queue */
-struct qemu_work_item {
-    struct qemu_work_item *next;
+struct kvm_work_item {
+    struct kvm_work_item *next;
     void (*func)(void *data);
     void *data;
     int done;
@@ -37,17 +37,17 @@ struct kvm_sw_breakpoint {
     target_ulong pc;
     target_ulong saved_insn;
     int use_count;
-    QTAILQ_ENTRY(kvm_sw_breakpoint) entry;
+    KTAILQ_ENTRY(kvm_sw_breakpoint) entry;
 };
 
 typedef struct CPUWatchpoint {
     target_ulong vaddr;
     target_ulong len_mask;
     int flags; /* BP_* */
-    QTAILQ_ENTRY(CPUWatchpoint) entry;
+    KTAILQ_ENTRY(CPUWatchpoint) entry;
 } CPUWatchpoint;
 
-QTAILQ_HEAD(kvm_sw_breakpoint_head, kvm_sw_breakpoint);
+KTAILQ_HEAD(kvm_sw_breakpoint_head, kvm_sw_breakpoint);
 
 /* Taken From Rabbits/rabbits/qemu/sc_qemu/bswap.h */
 
