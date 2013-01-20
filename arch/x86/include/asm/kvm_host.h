@@ -196,18 +196,26 @@ struct kvm_pte_chain {
 union kvm_mmu_page_role {
 	unsigned word;
 	struct {
-		unsigned level:4;
-		unsigned cr4_pae:1;
-		unsigned quadrant:2;
+		unsigned level:4;   /* MMH: The level in spage hierarchy; 1=4k sptes, 2=2M sptes, 3=1G sptes */
+		unsigned cr4_pae:1; /* MMH: 32-bit or 64-bit gptes */
+		unsigned quadrant:2;/* MMH: 1st level spages its 0 or 1 --> denotes 1st or 2nd 512-gpte block in gpt 
+								    2nd level spages its between 0 ... 3 --> each 32-bit gpte is converted to 2 64-bit sptes 
+									(since each 1st level gpage is shadowed by two 1st lvl spages )*/
 		unsigned pad_for_nice_hex_output:6;
-		unsigned direct:1;
-		unsigned access:3;
-		unsigned invalid:1;
-		unsigned nxe:1;
-		unsigned cr0_wp:1;
+		unsigned direct:1;	/* MMH: Set means leaf sptes reachable from 
+							   this page are for a linear range; else this 
+							   page corresponds to a guest page table denoted 
+							   by gfn.  */
+		unsigned access:3;	/* MMH: Inherited guest permisssions; 
+							   Format: uwx (eXecute permission +ve) */
+		unsigned invalid:1; /* MMH: Valid Page ? could indicate pinned page
+							   pinned: cpu hw reg pointing to page */
+		unsigned nxe:1;     /* EFER.NXE Value */
+		unsigned cr0_wp:1;  /* CR0.WP Value */
 	};
 };
 
+/* MMH: The Shadow Page Structure */
 struct kvm_mmu_page {
 	struct list_head link;
 	struct hlist_node hash_link;
@@ -216,10 +224,10 @@ struct kvm_mmu_page {
 	 * The following two entries are used to key the shadow page in the
 	 * hash table.
 	 */
-	gfn_t gfn;
+	gfn_t gfn; 	/* MMH: gpt containing translations or base page frame for linear translations */
 	union kvm_mmu_page_role role;
 
-	u64 *spt;
+	u64 *spt;	/* MMH: A page table of 64-bit sptes containing translations for this page */
 	/* hold the gfn of each spte inside spt */
 	gfn_t *gfns;
 	/*
@@ -277,7 +285,7 @@ struct kvm_mmu {
 	void (*update_pte)(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp,
 			   u64 *spte, const void *pte);
 	hpa_t root_hpa;
-	int root_level;
+	int root_level;	/* MMH: The number of hierarchical levels of the guest's paging */
 	int shadow_root_level;
 	union kvm_mmu_page_role base_role;
 	bool direct_map;
@@ -286,9 +294,10 @@ struct kvm_mmu {
 	u64 *lm_root;
 	u64 rsvd_bits_mask[2][4];
 
-	bool nx;
+	bool nx;  /* MMH: No-eXecution bits to separate areas of memory from being executed, 
+				 to avoid buffer overflow attacks. Obtained from VCPU EFER.NX flag*/
 
-	u64 pdptrs[4]; /* pae */
+	u64 pdptrs[4]; /* pae ; MMH: Page Directory Pointers */
 };
 
 struct kvm_vcpu_arch {

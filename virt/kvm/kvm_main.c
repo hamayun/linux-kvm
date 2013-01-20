@@ -2155,7 +2155,7 @@ static struct file_operations kvm_chardev_ops = {
 	.compat_ioctl   = kvm_dev_ioctl,
 	.llseek		= noop_llseek,
 };
-
+/* MMH: kvm device node */
 static struct miscdevice kvm_dev = {
 	KVM_MINOR,
 	"kvm",

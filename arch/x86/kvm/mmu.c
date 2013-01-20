@@ -1212,7 +1212,7 @@ static void nonpaging_update_pte(struct kvm_vcpu *vcpu,
 }
 
 #define KVM_PAGE_ARRAY_NR 16
-
+/* MMH: Shadow Pages */
 struct kvm_mmu_pages {
 	struct mmu_page_and_offset {
 		struct kvm_mmu_page *sp;
@@ -3026,6 +3026,7 @@ int kvm_init_shadow_mmu(struct kvm_vcpu *vcpu, struct kvm_mmu *context)
 	ASSERT(vcpu);
 	ASSERT(!VALID_PAGE(vcpu->arch.mmu.root_hpa));
 
+	/* Check if Paging is enabled on VCPU ? */
 	if (!is_paging(vcpu))
 		r = nonpaging_init_context(vcpu, context);
 	else if (is_long_mode(vcpu))
@@ -3090,6 +3091,8 @@ static int init_kvm_nested_mmu(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+/* Initialize the apporiate MMU:
+   Shadow Page Tables i.e. SoftMMU or Two Dimensional Paging (EPT/NPT) */
 static int init_kvm_mmu(struct kvm_vcpu *vcpu)
 {
 	if (mmu_is_nested(vcpu))
@@ -3480,6 +3483,7 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 	return alloc_mmu_pages(vcpu);
 }
 
+/* First Call for MMU Setup */
 int kvm_mmu_setup(struct kvm_vcpu *vcpu)
 {
 	ASSERT(vcpu);
