@@ -162,10 +162,9 @@ DEFINES	+= -D_GNU_SOURCE
 DEFINES	+= -DKVMTOOLS_VERSION='"$(KVMTOOLS_VERSION)"'
 
 KVM_INCLUDE := include
-SYSTEMC_INCLUDE := /home/hamayun/workspace/NaSiK/hw/components/kvm_wrapper_2
 #CFLAGS	+= $(CPPFLAGS) $(DEFINES) -I$(KVM_INCLUDE) -I../../include -I../../arch/$(ARCH)/include/ -Os -g
 CFLAGS	+= $(CPPFLAGS) $(DEFINES) -I$(KVM_INCLUDE) -I../../include -I../../arch/$(ARCH)/include/ -O0 -g
-CFLAGS	+= -I$(SYSTEMC_INCLUDE)
+CFLAGS	+= -I$(SYSTEMC_INCLUDE_FOR_KVM)
 
 ifneq ($(WERROR),0)
 	WARNINGS += -Werror
