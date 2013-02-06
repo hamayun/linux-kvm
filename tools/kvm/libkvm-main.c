@@ -41,14 +41,9 @@ __thread struct kvm_cpu *current_kvm_cpu;
 
 static u64 ram_size;
 
-// Variables for the platform main file
-uint64_t kvm_ram_size = 0;
-void *   kvm_userspace_mem_addr = NULL;
-
 static unsigned int nr_online_cpus;
 static const char *kernel_cmdline;
 static const char *kernel_filename;
-static const char *vmlinux_filename;
 static const char *initrd_filename;
 static const char *console;
 static const char *dev;
@@ -312,11 +307,13 @@ static const char *default_kernels[] = {
 	NULL
 };
 
+/*
 static const char *default_vmlinux[] = {
     "../../../vmlinux",
     "../../vmlinux",
 	NULL
 };
+*/
 
 static void kernel_usage_with_options(void)
 {
@@ -374,8 +371,7 @@ static u64 get_ram_size(int nr_cpus)
 	u64 available;
 	u64 ram_size;
 
-    //ram_size	= 64 * (nr_cpus + 3);
-    ram_size	= 256;
+    ram_size	= 64 * (nr_cpus + 3);
 
 	available	= host_ram_size() * RAM_SIZE_RATIO;
 	if (!available)
@@ -387,6 +383,7 @@ static u64 get_ram_size(int nr_cpus)
 	return ram_size;
 }
 
+#if 0
 static const char *find_kernel(void)
 {
 	const char **k;
@@ -437,6 +434,7 @@ static const char *find_vmlinux(void)
     }
 	return NULL;
 }
+#endif
 
 void kvm_help(void)
 {
@@ -516,7 +514,8 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 	return 0;
 }
 
-void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, const char *prefix)
+//void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, const char *prefix)
+void * kvm_internal_init(struct kvm_import_t *ki, uint32_t num_cpus, uint64_t ram_size /* MBs */, const char * kernel, const char * boot_loader, void * kvm_userspace_mem_addr)
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
@@ -532,7 +531,7 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 	kvm_ipc__register_handler(KVM_IPC_STOP, handle_stop);
 
 	nr_online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-
+#if 0
 	while (argc != 0) {
     	argc = parse_options(argc, argv, options, run_usage,
             	PARSE_OPT_STOP_AT_NON_OPTION);
@@ -555,13 +554,15 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	if (!kernel_filename)
     	kernel_filename = find_kernel();
+#endif
+
+    nrcpus = num_cpus;
+	kernel_filename = kernel;
 
 	if (!kernel_filename) {
     	kernel_usage_with_options();
     	return ((void *) EINVAL);
     }
-
-	vmlinux_filename = find_vmlinux();
 
 	if (nrcpus == 0)
     	nrcpus = nr_online_cpus;
@@ -608,7 +609,6 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
     }
 
     kvm_userspace_mem_addr = kvm->ram_start;
-    kvm_ram_size = kvm->ram_size;
 
     kvm_register_systemc_mmio_callbacks(kvm);
     kvm_register_io_callbacks(kvm);
@@ -626,14 +626,11 @@ void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, 
 
 	kvm->nrcpus = nrcpus;
 
-	printf("%s: -k %s -m %Lu -c %d --name %s\n", __func__,
-            kernel_filename, ram_size / 1024 / 1024, nrcpus, guest_name);
+	printf("<%s> Kernel File=%s, Boot Loader=%s, CPUs=%d, RAM Size=%Lu\n", 
+			__func__, kernel_filename, boot_loader, nrcpus, ram_size / 1024 / 1024);
 
-    if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename,
-       "/home/hamayun/workspace/NaSiK/sw/apes-components/KVMx86BootLoader/Primary/bin/KVMx86PrimaryBoot.bin"))
+    if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename, boot_loader))
         die("unable to load bootloader or elf kernel");
-
-	kvm->vmlinux	    = vmlinux_filename;
 
     printf("KVM Initialized\n");
     return (void *) kvm;             // Return KVM Instance Pointer to Caller
@@ -645,8 +642,8 @@ int kvm_run_cpus(void)
     int exit_code = 0;
     void *ret;
 
-	ioport__setup_legacy();
-	serial8250__init(kvm);
+	//ioport__setup_legacy();
+	//serial8250__init(kvm);
 
 	kvm__setup_bios(kvm);
 

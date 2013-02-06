@@ -878,7 +878,7 @@ bool kvm__load_bootstrap_elf_kernel(struct kvm *kvm,
 	if (fd_bootstrap < 0)
 		die("Unable to open bootstrap");
 
-	//printf("Loading Bootstrap as a flat binary ... %s\n", boot_loader);
+	printf("Loading Bootstrap as a flat binary ... %s\n", boot_loader);
     ret = load_flat_binary(kvm, fd_bootstrap);
     if (!ret){
         close(fd_bootstrap);
