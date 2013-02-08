@@ -441,7 +441,7 @@ void kvm_help(void)
 	usage_with_options(run_usage, options);
 }
 
-extern void * p_kvm_cpu_adaptor;
+void * p_kvm_wrapper = NULL;
 extern uint64_t systemc_kvm_read_memory (void *_this, uint32_t cpu_id, uint64_t addr,
 										 int nbytes, unsigned int *ns, int bIO);
 extern void     systemc_kvm_write_memory (void *_this, uint32_t cpu_id, uint64_t addr,
@@ -476,12 +476,12 @@ static void generic_systemc_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *dat
     if(is_write)
     {
         //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        systemc_kvm_write_memory(p_kvm_cpu_adaptor, (uint32_t) cpu->cpu_id, addr, data, len, NULL, 1);
+        systemc_kvm_write_memory(p_kvm_wrapper, (uint32_t) cpu->cpu_id, addr, data, len, NULL, 1);
     }
     else
     {
         //printf("MMIO Read: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        value = systemc_kvm_read_memory(p_kvm_cpu_adaptor, (uint32_t) cpu->cpu_id, addr, len, NULL, 1);
+        value = systemc_kvm_read_memory(p_kvm_wrapper, (uint32_t) cpu->cpu_id, addr, len, NULL, 1);
         for (i = 0; i < len; i++)
             data[i] = *((unsigned char *) &value + i);
     }
@@ -536,14 +536,17 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 	return 0;
 }
 
-//void * kvm_internal_init(struct kvm_import_t * ki, int argc, const char **argv, const char *prefix)
-void * kvm_internal_init(struct kvm_import_t *ki, uint32_t num_cpus, uint64_t ram_size /* MBs */, const char * kernel, const char * boot_loader, void * kvm_userspace_mem_addr)
+void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, uint64_t ram_size /* MBs */,
+					     const char * kernel, const char * boot_loader, void * kvm_userspace_mem_addr)
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
 
+	// Get the KVM WRAPPER Reference
+	p_kvm_wrapper = kie->imp_kvm_wrapper;
+
     // Fill in the function table for SystemC (Called by Platform or Components)
-	ki->gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
+	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
 
 	signal(SIGALRM, handle_sigalrm);
 	signal(SIGUSR1, handle_sigusr1);
