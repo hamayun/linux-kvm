@@ -442,24 +442,46 @@ void kvm_help(void)
 }
 
 extern void * p_kvm_cpu_adaptor;
-extern uint64_t systemc_kvm_read_memory (void *_this, uint64_t addr, int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_kvm_write_memory (void *_this, uint64_t addr, unsigned char *data, int nbytes, unsigned int *ns, int bIO);
+extern uint64_t systemc_kvm_read_memory (void *_this, uint32_t cpu_id, uint64_t addr,
+										 int nbytes, unsigned int *ns, int bIO);
+extern void     systemc_kvm_write_memory (void *_this, uint32_t cpu_id, uint64_t addr,
+										  unsigned char *data, int nbytes, unsigned int *ns, int bIO);
 
-
-static void generic_systemc_mmio_handler(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
+static void generic_systemc_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
     u64 value;
     u32 i;
 
+# if 1		// Verify that each CPU is Actually Running 
+	static u64 id_list[256] = {0};
+	static u32 id_count = 0;
+	u32	found = 0;
+
+	for(i = 0; i < id_count; i++)
+	{
+		if(id_list[i] == cpu->cpu_id)
+		{
+			found = 1;
+			break;
+		}
+	}
+
+	if(!found)
+	{
+		id_list[id_count++] = cpu->cpu_id;
+		printf("MMIO Request: KVM CPU ID = %ld\n", cpu->cpu_id);
+	}
+#endif
+
     if(is_write)
     {
         //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        systemc_kvm_write_memory(p_kvm_cpu_adaptor, addr, data, len, NULL, 1);
+        systemc_kvm_write_memory(p_kvm_cpu_adaptor, (uint32_t) cpu->cpu_id, addr, data, len, NULL, 1);
     }
     else
     {
         //printf("MMIO Read: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        value = systemc_kvm_read_memory(p_kvm_cpu_adaptor, addr, len, NULL, 1);
+        value = systemc_kvm_read_memory(p_kvm_cpu_adaptor, (uint32_t) cpu->cpu_id, addr, len, NULL, 1);
         for (i = 0; i < len; i++)
             data[i] = *((unsigned char *) &value + i);
     }

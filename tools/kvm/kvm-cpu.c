@@ -472,7 +472,7 @@ static void kvm_cpu__handle_coalesced_mmio(struct kvm_cpu *cpu)
 			struct kvm_coalesced_mmio *m;
 			m = &cpu->ring->coalesced_mmio[cpu->ring->first];
 
-			kvm__emulate_mmio(cpu->kvm,
+			kvm__emulate_mmio(cpu,
 					m->phys_addr,
 					m->data,
 					m->len,
@@ -608,7 +608,7 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
        		printf("NORMAL_MMIO: Address = 0x%08X, Length = %d, is_write = %d\n",
                    (u32) cpu->kvm_run->mmio.phys_addr, (u32) cpu->kvm_run->mmio.len, (u32) cpu->kvm_run->mmio.is_write);
 #endif
-	        ret = kvm__emulate_mmio(cpu->kvm,
+	        ret = kvm__emulate_mmio(cpu,
      				                cpu->kvm_run->mmio.phys_addr,
                                     cpu->kvm_run->mmio.data,
                                     cpu->kvm_run->mmio.len,

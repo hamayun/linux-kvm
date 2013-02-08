@@ -217,7 +217,7 @@ static struct ioport_operations virtio_pci__io_ops = {
 	.io_out	= virtio_pci__io_out,
 };
 
-static void callback_mmio_table(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
+static void callback_mmio_table(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
 	struct virtio_pci *vpci = ptr;
 	void *table = &vpci->msix_table;
@@ -227,7 +227,7 @@ static void callback_mmio_table(u64 addr, u8 *data, u32 len, u8 is_write, void *
 		memcpy(data, table + addr - vpci->msix_io_block, len);
 }
 
-static void callback_mmio_pba(u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
+static void callback_mmio_pba(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
 	struct virtio_pci *vpci = ptr;
 	void *pba = &vpci->msix_pba;
