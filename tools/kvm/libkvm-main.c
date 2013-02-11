@@ -536,8 +536,9 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 	return 0;
 }
 
-void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, uint64_t ram_size /* MBs */,
-					     const char * kernel, const char * boot_loader, void * kvm_userspace_mem_addr)
+void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
+                         uint64_t ram_size /* MBs */, const char * kernel,
+                         const char * boot_loader, void * kvm_userspace_mem_addr)
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
@@ -657,49 +658,62 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, ui
     if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename, boot_loader))
         die("unable to load bootloader or elf kernel");
 
-    printf("KVM Initialized\n");
-    return (void *) kvm;             // Return KVM Instance Pointer to Caller
-}
-
-int kvm_run_cpus(void)
-{
-    int i;
-    int exit_code = 0;
-    void *ret;
-
-	//ioport__setup_legacy();
-	//serial8250__init(kvm);
-
 	kvm__setup_bios(kvm);
-
-    printf("Initializing KVM VCPUs ... ");
-
-	for (i = 0; i < nrcpus; i++) {
-        printf("%d  ", i);
-
-        kvm_cpus[i] = kvm_cpu__init(kvm, i);
-    	if (!kvm_cpus[i])
-        	die("unable to initialize KVM VCPU");
-
-        if(i == 0)
-            kvm->first_cpu = kvm_cpus[i];
-        else
-            kvm_cpus[i-1]->next_cpu = kvm_cpus[i];
-
-        kvm_cpus[i]->next_cpu = NULL;
-    }
-    printf("\n");
 
 	kvm__init_ram(kvm);
 
-	for (i = 0; i < nrcpus; i++) {
-    	if (pthread_create(&kvm_cpus[i]->thread, NULL, kvm_cpu_thread, kvm_cpus[i]) != 0)
-        	die("unable to create KVM VCPU thread");
-    }
+    printf("KVM Initialized\n");
+    return (void *) kvm;            // Return KVM Instance Pointer to Caller
+}
 
-    /* Only VCPU #0 is going to exit by itself when shutting down */
-	if (pthread_join(kvm_cpus[0]->thread, &ret) != 0)
-    	exit_code = 1;
+void * kvm_cpu_internal_init(void * kvm_instance, int i)
+{
+    struct kvm * kvm = kvm_instance;
+
+    printf("Initializing KVM VCPU ... %d\n", i);
+
+    kvm_cpus[i] = kvm_cpu__init(kvm, i);
+    if (!kvm_cpus[i])
+        die("unable to initialize KVM VCPU");
+
+    if(i == 0)
+      kvm->first_cpu = kvm_cpus[i];
+    else
+      kvm_cpus[i-1]->next_cpu = kvm_cpus[i];
+
+    kvm_cpus[i]->next_cpu = NULL;
+    return (void *) kvm_cpus[i];
+}
+
+int kvm_run_cpu(void * kvm_cpu_instance)
+{
+    struct kvm_cpu * kvm_cpu = kvm_cpu_instance;
+    int exit_code = 0;
+    void *ret;
+
+#if 0
+	printf("SystemC Thread for CPU %ld\n", kvm_cpu->cpu_id);
+	kvm_cpu_thread(kvm_cpu);
+#else
+    if (pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu) != 0)
+        die("unable to create KVM VCPU thread");
+
+	/* Only VCPU #0 is going to exit by itself when shutting down */
+	if (kvm_cpu->cpu_id == 0)
+	{
+        if (pthread_join(kvm_cpu->thread, &ret) != 0)
+            exit_code = 1;
+	}
+#endif
+
+    return exit_code;
+}
+
+int kvm_internal_exit(void)
+{
+    int exit_code = 0;
+    void *ret;
+    int i;
 
 	for (i = 1; i < nrcpus; i++) {
     	if (kvm_cpus[i]->is_running) {
