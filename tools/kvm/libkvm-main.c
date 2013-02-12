@@ -441,18 +441,18 @@ void kvm_help(void)
 	usage_with_options(run_usage, options);
 }
 
-void * p_kvm_wrapper = NULL;
-extern uint64_t systemc_kvm_read_memory (void *_this, uint32_t cpu_id, uint64_t addr,
+void **p_sysc_cpu_wrapper = NULL;
+extern uint64_t systemc_kvm_read_memory (void *_this, uint64_t addr,
 										 int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_kvm_write_memory (void *_this, uint32_t cpu_id, uint64_t addr,
+extern void     systemc_kvm_write_memory (void *_this, uint64_t addr,
 										  unsigned char *data, int nbytes, unsigned int *ns, int bIO);
 
-static void generic_systemc_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
+static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
     u64 value;
     u32 i;
 
-# if 1		// Verify that each CPU is Actually Running 
+# if 0		// Verify that each CPU is Actually Running 
 	static u64 id_list[256] = {0};
 	static u32 id_count = 0;
 	u32	found = 0;
@@ -476,12 +476,12 @@ static void generic_systemc_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *dat
     if(is_write)
     {
         //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        systemc_kvm_write_memory(p_kvm_wrapper, (uint32_t) cpu->cpu_id, addr, data, len, NULL, 1);
+        systemc_kvm_write_memory(p_sysc_cpu_wrapper[cpu->cpu_id], addr, data, len, NULL, 1);
     }
     else
     {
         //printf("MMIO Read: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        value = systemc_kvm_read_memory(p_kvm_wrapper, (uint32_t) cpu->cpu_id, addr, len, NULL, 1);
+        value = systemc_kvm_read_memory(p_sysc_cpu_wrapper[cpu->cpu_id], addr, len, NULL, 1);
         for (i = 0; i < len; i++)
             data[i] = *((unsigned char *) &value + i);
     }
@@ -495,16 +495,16 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     // Also consider modifying the node maps for device type; Input/Output or Output only.
     // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
 
-    //kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL); // Causes some problems in Printing to TTY
-    kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_systemc_mmio_handler, NULL);
+    //kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL); // Causes some problems in Printing to TTY
+    kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_mmio_handler, NULL);
 
-    kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC4000000, 0x100000, generic_systemc_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC4000000, 0x100000, generic_mmio_handler, NULL);
 
-    kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_systemc_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6A00000, 0x100000, generic_systemc_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_mmio_handler, NULL);
+    kvm__register_mmio(kvm, 0xC6A00000, 0x100000, generic_mmio_handler, NULL);
     return 0;
 }
 
@@ -542,9 +542,6 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
-
-	// Get the KVM WRAPPER Reference
-	p_kvm_wrapper = kie->imp_kvm_wrapper;
 
     // Fill in the function table for SystemC (Called by Platform or Components)
 	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
@@ -652,6 +649,9 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 
 	kvm->nrcpus = nrcpus;
 
+	// Create a pointer table for Referencing SystemC CPUs
+	p_sysc_cpu_wrapper = malloc(nrcpus * sizeof(void *));
+
 	printf("<%s> Kernel File=%s, Boot Loader=%s, CPUs=%d, RAM Size=%Lu\n", 
 			__func__, kernel_filename, boot_loader, nrcpus, ram_size / 1024 / 1024);
 
@@ -666,35 +666,41 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
     return (void *) kvm;            // Return KVM Instance Pointer to Caller
 }
 
-void * kvm_cpu_internal_init(void * kvm_instance, int i)
+void * kvm_cpu_internal_init(void * kvm_instance, void * sc_kvm_cpu, int cpu_id)
 {
     struct kvm * kvm = kvm_instance;
 
-    printf("Initializing KVM VCPU ... %d\n", i);
+	// Save SystemC CPU Instance for later MMIO/Annotation Calls
+	if(cpu_id < kvm->nrcpus)
+    {
+        printf("Initializing KVM VCPU ... %d\n", cpu_id);
+        p_sysc_cpu_wrapper[cpu_id] = sc_kvm_cpu;
+	}
+	else
+	{
+        fprintf(stderr, "Error Creating VCPU (Mismatch from KVM Initialization %d)\n", kvm->nrcpus); 
+		return(NULL);
+	}
 
-    kvm_cpus[i] = kvm_cpu__init(kvm, i);
-    if (!kvm_cpus[i])
+    kvm_cpus[cpu_id] = kvm_cpu__init(kvm, cpu_id);
+    if (!kvm_cpus[cpu_id])
         die("unable to initialize KVM VCPU");
 
-    if(i == 0)
-      kvm->first_cpu = kvm_cpus[i];
+    if(cpu_id == 0)
+      kvm->first_cpu = kvm_cpus[cpu_id];
     else
-      kvm_cpus[i-1]->next_cpu = kvm_cpus[i];
+      kvm_cpus[cpu_id-1]->next_cpu = kvm_cpus[cpu_id];
 
-    kvm_cpus[i]->next_cpu = NULL;
-    return (void *) kvm_cpus[i];
+    kvm_cpus[cpu_id]->next_cpu = NULL;
+    return (void *) kvm_cpus[cpu_id];
 }
 
-int kvm_run_cpu(void * kvm_cpu_instance)
+int kvm_run_cpu(void * kvm_cpu_inst)
 {
-    struct kvm_cpu * kvm_cpu = kvm_cpu_instance;
+    struct kvm_cpu * kvm_cpu = kvm_cpu_inst;
     int exit_code = 0;
     void *ret;
 
-#if 0
-	printf("SystemC Thread for CPU %ld\n", kvm_cpu->cpu_id);
-	kvm_cpu_thread(kvm_cpu);
-#else
     if (pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu) != 0)
         die("unable to create KVM VCPU thread");
 
@@ -704,7 +710,6 @@ int kvm_run_cpu(void * kvm_cpu_instance)
         if (pthread_join(kvm_cpu->thread, &ret) != 0)
             exit_code = 1;
 	}
-#endif
 
     return exit_code;
 }
@@ -725,6 +730,12 @@ int kvm_internal_exit(void)
         	exit_code = 1;
     }
 
+	if(p_sysc_cpu_wrapper)
+	{
+		free(p_sysc_cpu_wrapper);
+		p_sysc_cpu_wrapper = NULL;
+	}
+	
 	kvm__delete(kvm);
 
 	if (!exit_code)
