@@ -92,8 +92,9 @@ static bool virtio_pci__specific_io_in(struct kvm *kvm, struct virtio_trans *vtr
 	return false;
 }
 
-static bool virtio_pci__io_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool virtio_pci__io_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
+	struct kvm *kvm = kvm_cpu->kvm;
 	unsigned long offset;
 	bool ret = true;
 	struct virtio_trans *vtrans;
@@ -172,8 +173,9 @@ static bool virtio_pci__specific_io_out(struct kvm *kvm, struct virtio_trans *vt
 	return false;
 }
 
-static bool virtio_pci__io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool virtio_pci__io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
+	struct kvm *kvm = kvm_cpu->kvm;
 	unsigned long offset;
 	bool ret = true;
 	struct virtio_trans *vtrans;

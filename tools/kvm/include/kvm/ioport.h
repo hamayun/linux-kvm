@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <asm/types.h>
 #include <linux/types.h>
+#include "kvm/kvm-cpu.h"
 
 /* some ports we reserve for own use */
 #define IOPORT_DBG			0xe0
@@ -15,8 +16,6 @@
 
 #define IOPORT_EMPTY			USHRT_MAX
 
-struct kvm;
-
 struct ioport {
 	struct rb_int_node		node;
 	struct ioport_operations	*ops;
@@ -24,8 +23,8 @@ struct ioport {
 };
 
 struct ioport_operations {
-	bool (*io_in)(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size);
-	bool (*io_out)(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size);
+	bool (*io_in)(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size);
+	bool (*io_out)(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size);
 };
 
 void ioport__setup_legacy(void);

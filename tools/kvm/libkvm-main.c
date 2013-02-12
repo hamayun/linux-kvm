@@ -446,6 +446,7 @@ extern uint64_t systemc_kvm_read_memory (void *_this, uint64_t addr,
 										 int nbytes, unsigned int *ns, int bIO);
 extern void     systemc_kvm_write_memory (void *_this, uint64_t addr,
 										  unsigned char *data, int nbytes, unsigned int *ns, int bIO);
+extern void     systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
 
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
@@ -508,7 +509,7 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     return 0;
 }
 
-static bool semihosting_io_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool semihosting_io_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
     *pdata = 1;
@@ -517,7 +518,7 @@ static bool semihosting_io_in(struct ioport *ioport, struct kvm *kvm, u16 port, 
     return true;
 }
 
-static bool semihosting_io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool semihosting_io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
 
@@ -530,9 +531,38 @@ static struct ioport_operations semihosting_read_write_ioport_ops = {
     .io_out	    = semihosting_io_out,
 };
 
+// Annotation Support
+#define ANNOTATION_BASEPORT 0x4000
+static bool generic_annotation_function(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+	struct kvm * kvm = kvm_cpu->kvm;
+    uint32_t * pdata = (uint32_t *) data;	/* data in is a pointer to one annotation
+                                               database or an annotation buffer */
+	if(*pdata)
+	{
+    	uint32_t * pdb = (uint32_t *) (kvm->ram_start + (*pdata));
+
+	    // printf("generic_annotation_function: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+		systemc_annotate_function(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], kvm->ram_start, pdb);
+	}
+	else
+	{
+        printf("%s: Overflow in S/W (All Annotation Buffers Full): *pdata = 0x%08x\n", __func__, (uint32_t)(*pdata));
+        exit(1);	
+	}
+
+    return true;
+}
+
+static struct ioport_operations annotation_ioport_ops = {
+    .io_in	    = NULL,
+    .io_out	    = generic_annotation_function,
+};
+
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
     ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
+    ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
 	return 0;
 }
 
@@ -542,6 +572,8 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
+
+	// ioport_debug = 1;
 
     // Fill in the function table for SystemC (Called by Platform or Components)
 	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;

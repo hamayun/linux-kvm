@@ -173,7 +173,7 @@ static struct serial8250_device *find_device(u16 port)
 	return NULL;
 }
 
-static bool serial8250_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool serial8250_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	struct serial8250_device *dev;
 	u16 offset;
@@ -261,7 +261,7 @@ out_unlock:
 	return ret;
 }
 
-static bool serial8250_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool serial8250_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	struct serial8250_device *dev;
 	u16 offset;

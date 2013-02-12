@@ -34,7 +34,7 @@ static void *pci_config_address_ptr(u16 port)
 	return base + offset;
 }
 
-static bool pci_config_address_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool pci_config_address_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	void *p = pci_config_address_ptr(port);
 
@@ -43,7 +43,7 @@ static bool pci_config_address_out(struct ioport *ioport, struct kvm *kvm, u16 p
 	return true;
 }
 
-static bool pci_config_address_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool pci_config_address_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	void *p = pci_config_address_ptr(port);
 
@@ -75,7 +75,7 @@ static bool pci_device_exists(u8 bus_number, u8 device_number, u8 function_numbe
 	return dev != NULL;
 }
 
-static bool pci_config_data_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool pci_config_data_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	unsigned long start;
 	u8 dev_num;
@@ -121,7 +121,7 @@ static bool pci_config_data_out(struct ioport *ioport, struct kvm *kvm, u16 port
 	return true;
 }
 
-static bool pci_config_data_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool pci_config_data_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	unsigned long start;
 	u8 dev_num;

@@ -55,7 +55,7 @@ static int ioport_insert(struct rb_root *root, struct ioport *data)
 	return rb_int_insert(root, &data->node);
 }
 
-static bool debug_io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool debug_io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	exit(EXIT_SUCCESS);
 }
@@ -64,12 +64,12 @@ static struct ioport_operations debug_ops = {
 	.io_out		= debug_io_out,
 };
 
-static bool dummy_io_in(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool dummy_io_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	return true;
 }
 
-static bool dummy_io_out(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
+static bool dummy_io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	return true;
 }
@@ -160,7 +160,7 @@ static void ioport_error(u16 port, void *data, int direction, int size, u32 coun
 	fprintf(stderr, "IO error: %s port=0x%x, size=%d, count=%u\n", to_direction(direction), port, size, count);
 }
 
-bool kvm__emulate_io(struct kvm *kvm, u16 port, void *data, int direction, int size, u32 count)
+bool kvm__emulate_io(struct kvm_cpu *kvm_cpu, u16 port, void *data, int direction, int size, u32 count)
 {
 	struct ioport_operations *ops;
 	bool ret = false;
@@ -177,10 +177,10 @@ bool kvm__emulate_io(struct kvm *kvm, u16 port, void *data, int direction, int s
 	while (count--) {
 		if (direction == KVM_EXIT_IO_IN) {
 			if (ops->io_in)
-				ret = ops->io_in(entry, kvm, port, ptr, size);
+				ret = ops->io_in(entry, kvm_cpu, port, ptr, size);
 		} else {
 			if (ops->io_out)
-				ret = ops->io_out(entry, kvm, port, ptr, size);
+				ret = ops->io_out(entry, kvm_cpu, port, ptr, size);
 		}
 
 		ptr += size;
