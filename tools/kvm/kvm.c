@@ -348,7 +348,7 @@ void kvm__init_ram(struct kvm *kvm)
 
 	if (kvm->ram_size < KVM_32BIT_GAP_START) {
 		/* Use a single block of RAM for 32bit RAM */
-                printf("Initializing RAM: Single Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
+        printf("Initializing RAM: Single Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = kvm->ram_size;
@@ -357,7 +357,7 @@ void kvm__init_ram(struct kvm *kvm)
 		kvm__register_mem(kvm, phys_start, phys_size, host_mem);
 	} else {
 		/* First RAM range from zero to the PCI gap: */
-                printf("Initializing RAM: Double Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
+        printf("Initializing RAM: Double Block of RAM; Size = %d MB\n", (int) kvm->ram_size/1024/1024);
 
 		phys_start = 0;
 		phys_size  = KVM_32BIT_GAP_START;
@@ -914,6 +914,7 @@ void kvm__setup_bios(struct kvm *kvm)
 
 	/* MP table */
 	mptable_setup(kvm, kvm->nrcpus);
+    printf("KVM BIOS and MP Table Setup Done.\n");
 }
 
 #define TIMER_INTERVAL_NS 1000000	/* 1 msec */
@@ -958,6 +959,7 @@ void kvm__stop_timer(struct kvm *kvm)
 void kvm__irq_line(struct kvm *kvm, int irq, int level)
 {
 	struct kvm_irq_level irq_level;
+	int rval = 0;
 
 	irq_level	= (struct kvm_irq_level) {
 		{
@@ -966,12 +968,20 @@ void kvm__irq_line(struct kvm *kvm, int irq, int level)
 		.level		= level,
 	};
 
-	if (ioctl(kvm->vm_fd, KVM_IRQ_LINE, &irq_level) < 0)
+	rval = ioctl(kvm->vm_fd, KVM_IRQ_LINE, &irq_level);
+	if(rval < 0)
 		die_perror("KVM_IRQ_LINE failed");
+
+	if(rval == 0)
+		printf("Interrupt %d was coalesced i.e. previous IRQ still pending\n", irq);
+
+	if(rval > 0)
+		printf("Interrupt was delivered to %d cpus", rval);
 }
 
 void kvm__irq_trigger(struct kvm *kvm, int irq)
 {
+	printf("Going to trigger kvm irq = %d\n", irq);
 	kvm__irq_line(kvm, irq, 1);
 	kvm__irq_line(kvm, irq, 0);
 }

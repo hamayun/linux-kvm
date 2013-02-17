@@ -130,6 +130,9 @@ int irq__register_device(u32 dev, u8 *num, u8 *pin, u8 *line)
 
 		list_add(&new->node, &node->lines);
 
+		printf("%s: Registered device %d, num %d, pin %d for line %d\n",
+		   __func__, dev, *num, *pin, *line);
+
 		return 0;
 	}
 
@@ -165,6 +168,8 @@ void irq__init(struct kvm *kvm)
 	r = ioctl(kvm->vm_fd, KVM_SET_GSI_ROUTING, irq_routing);
 	if (r)
 		die("Failed setting GSI routes");
+
+	printf("Initialized IRQ Routing\n");
 }
 
 int irq__add_msix_route(struct kvm *kvm, struct msi_msg *msg)

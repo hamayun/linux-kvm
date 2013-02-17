@@ -7,6 +7,7 @@
 #include "kvm/ioport.h"
 #include "kvm/symbol.h"
 #include "kvm/kvm.h"
+#include "kvm/irq.h"
 #include "kvm/pci-shmem.h"
 #include "kvm/kvm-ipc.h"
 
@@ -563,6 +564,7 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 {
     ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
     ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
+
 	return 0;
 }
 
@@ -649,6 +651,8 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 
 	kvm = kvm__init(dev, ram_size, guest_name);
 
+	irq__init(kvm);
+
     if(kvm_debug_port)
     {
         kvm->enable_debug_mode = true;
@@ -690,12 +694,18 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
     if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename, boot_loader))
         die("unable to load bootloader or elf kernel");
 
-	kvm__setup_bios(kvm);
-
-	kvm__init_ram(kvm);
-
     printf("KVM Initialized\n");
     return (void *) kvm;            // Return KVM Instance Pointer to Caller
+}
+
+void kvm_setup_bios_and_ram(void * kvm_instance)
+{
+    struct kvm * kvm = kvm_instance;
+
+	kvm__setup_bios(kvm);		// Also does the MP Table Initialization.
+	kvm__init_ram(kvm);
+
+	return;
 }
 
 void * kvm_cpu_internal_init(void * kvm_instance, void * sc_kvm_cpu, int cpu_id)
@@ -705,7 +715,7 @@ void * kvm_cpu_internal_init(void * kvm_instance, void * sc_kvm_cpu, int cpu_id)
 	// Save SystemC CPU Instance for later MMIO/Annotation Calls
 	if(cpu_id < kvm->nrcpus)
     {
-        printf("Initializing KVM VCPU ... %d\n", cpu_id);
+        printf("Init KVM VCPU ... %d\n", cpu_id);
         p_sysc_cpu_wrapper[cpu_id] = sc_kvm_cpu;
 	}
 	else
