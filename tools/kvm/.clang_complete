@@ -1,0 +1,5 @@
+-Iinclude
+-I../../arch/x86
+-I../../include
+-I../../arch/x86/include
+-I/home/hamayun/workspace/NaSiK/hw/components/kvm_wrapper_smp/

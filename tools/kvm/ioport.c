@@ -83,39 +83,6 @@ static struct ioport_operations dummy_write_only_ioport_ops = {
 	.io_out		= dummy_io_out,
 };
 
-#if 0
-extern __thread struct kvm_cpu *current_kvm_cpu;
-
-static void gdbsrv_guest_regs(guest_reg_state_t * regs)
-{
-    printf("  EAX = 0x%08X   EBX = 0x%08X   ECX = 0x%08X   EDX = 0x%08X\n", regs->eax, regs->ebx, regs->ecx, regs->edx);
-    printf("  ESP = 0x%08X   EBP = 0x%08X   ESI = 0x%08X   EDI = 0x%08X\n", regs->esp, regs->ebp, regs->esi, regs->edi);
-    printf("FLAGS = 0x%08X USESP = 0x%08X INT # = 0x%04X       EIP = 0x%08X\n", regs->eflags, regs->useresp, regs->int_no, regs->eip);
-    printf("   CS = 0x%04X        SS = 0x%04X        DS = 0x%04X        ES = 0x%04X\n", regs->cs, regs->ss, regs->ds, regs->es);
-    printf("   FS = 0x%04X        GS = 0x%04X\n", regs->fs, regs->gs);
-
-    return;
-}
-
-static bool gdbsrv_hook_fun(struct ioport *ioport, struct kvm *kvm, u16 port, void *data, int size)
-{
-    guest_reg_state_t * regs = (guest_reg_state_t *)(kvm->ram_start + *((u32 *) data));
-
-    printf("GDB Server Hook: Port = %X, Data = %X, Size = %X\n", port, *((u32 *) data), size);
-
-    gdbsrv_guest_regs(regs);
-
-    kvm->m_gdb->m_regs_state = regs;
-    //gdb_verify (kvm);
-
-	return true;
-}
-
-static struct ioport_operations gdbsrv_hook_ops = {
-	.io_out		= gdbsrv_hook_fun,
-};
-#endif
-
 u16 ioport__register(u16 port, struct ioport_operations *ops, int count, void *param)
 {
 	struct ioport *entry;
@@ -225,8 +192,4 @@ void ioport__setup_legacy(void)
 	/* PORT 03D4-03D5 - COLOR VIDEO - CRT CONTROL REGISTERS */
 	ioport__register(0x03D4, &dummy_read_write_ioport_ops, 1, NULL);
 	ioport__register(0x03D5, &dummy_write_only_ioport_ops, 1, NULL);
-
-	/* Ports to Handle SingleSteps/Breakpoints in S/W */
-	//ioport__register(IOPORT_SINGLESTEP, &gdbsrv_hook_ops, 1, NULL);
-	//ioport__register(IOPORT_BREAKPOINT, &gdbsrv_hook_ops, 1, NULL);
 }
