@@ -972,11 +972,14 @@ void kvm__irq_line(struct kvm *kvm, int irq, int level)
 	if(rval < 0)
 		die_perror("KVM_IRQ_LINE failed");
 
+#if 0	/* The coalesced return value means that some interrupts are pending in guest,
+		   not necessarily the one we just injected above. */
 	if(rval == 0)
 		printf("Interrupt %d was coalesced i.e. previous IRQ still pending\n", irq);
 
 	if(rval > 0)
 		printf("Interrupt was delivered to %d cpus", rval);
+#endif
 }
 
 void kvm__irq_trigger(struct kvm *kvm, int irq)

@@ -56,23 +56,6 @@ ENTRY(bios_intfake)
 ENTRY_END(bios_intfake)
 
 /*
- * interrupt handler, for breakpoint exceptions in S/W, that lends control
- * to host mode code for further processing.
- */
-ENTRY(bios_int3)
-    SAVE_BIOSREGS
-
-	call	int3_handler
-
-	RESTORE_BIOSREGS
-
-	/* Clear CF to indicate success.  */
-	andl	$~EFLAGS_CF, 0x4(%esp)
-
-	IRET
-ENTRY_END(bios_int3)
-
-/*
  * int 10 - video - service
  */
 ENTRY(bios_int10)
