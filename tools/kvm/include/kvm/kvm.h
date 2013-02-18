@@ -78,7 +78,7 @@ const char *kvm__get_dir(void);
 struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name);
 int kvm__recommended_cpus(struct kvm *kvm);
 int kvm__max_cpus(struct kvm *kvm);
-void kvm__init_ram(struct kvm *kvm);
+void * kvm__init_ram(struct kvm *kvm);
 void kvm__delete(struct kvm *kvm);
 bool kvm__load_kernel(struct kvm *kvm, const char *kernel_filename,
 			const char *initrd_filename, const char *kernel_cmdline, u16 vidmode);

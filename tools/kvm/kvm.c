@@ -341,7 +341,7 @@ void kvm__register_mem(struct kvm *kvm, u64 guest_phys, u64 size, void *userspac
  * a gap between 0xe0000000 and 0x100000000 in the guest virtual mem space.
  */
 
-void kvm__init_ram(struct kvm *kvm)
+void * kvm__init_ram(struct kvm *kvm)
 {
 	u64	phys_start, phys_size;
 	void	*host_mem;
@@ -373,6 +373,8 @@ void kvm__init_ram(struct kvm *kvm)
 
 		kvm__register_mem(kvm, phys_start, phys_size, host_mem);
 	}
+
+	return host_mem;
 }
 
 int kvm__recommended_cpus(struct kvm *kvm)
