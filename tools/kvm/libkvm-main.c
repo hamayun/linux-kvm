@@ -569,8 +569,7 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 }
 
 void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
-                         uint64_t ram_size /* MBs */, const char * kernel,
-                         const char * boot_loader, void * kvm_userspace_mem_addr)
+                         uint64_t ram_size /* MBs */) 
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
@@ -614,12 +613,6 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 #endif
 
     nrcpus = num_cpus;
-	kernel_filename = kernel;
-
-	if (!kernel_filename) {
-    	kernel_usage_with_options();
-    	return ((void *) EINVAL);
-    }
 
 	if (nrcpus == 0)
     	nrcpus = nr_online_cpus;
@@ -667,8 +660,6 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
         kvm->enable_debug_mode = false;
     }
 
-    kvm_userspace_mem_addr = kvm->ram_start;
-
     kvm_register_systemc_mmio_callbacks(kvm);
     kvm_register_io_callbacks(kvm);
 
@@ -688,22 +679,32 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,
 	// Create a pointer table for Referencing SystemC CPUs
 	p_sysc_cpu_wrapper = malloc(nrcpus * sizeof(void *));
 
-	printf("<%s> Kernel File=%s, Boot Loader=%s, CPUs=%d, RAM Size=%Lu\n", 
-			__func__, kernel_filename, boot_loader, nrcpus, ram_size / 1024 / 1024);
-
-    if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename, boot_loader))
-        die("unable to load bootloader or elf kernel");
-
     printf("KVM Initialized\n");
     return (void *) kvm;            // Return KVM Instance Pointer to Caller
 }
 
-void kvm_setup_bios_and_ram(void * kvm_instance)
+void kvm_setup_bios_and_ram(void * kvm_instance, void * kvm_userspace_mem_addr,
+                            const char * kernel, const char * boot_loader)
 {
     struct kvm * kvm = kvm_instance;
 
+	kernel_filename = kernel;
+
+	if (!kernel_filename) {
+    	kernel_usage_with_options();
+    	return ((void *) EINVAL);
+    }
+
 	kvm__setup_bios(kvm);		// Also does the MP Table Initialization.
 	kvm__init_ram(kvm);
+
+    kvm_userspace_mem_addr = kvm->ram_start;
+
+	printf("<%s> Kernel File=%s, Boot Loader=%s, CPUs=%d, RAM Size=%Lu\n", 
+			__func__, kernel_filename, boot_loader, nrcpus, kvm->ram_size);
+
+    if(!kvm__load_bootstrap_elf_kernel(kvm, kernel_filename, boot_loader))
+        die("unable to load bootloader or elf kernel");
 
 	return;
 }
