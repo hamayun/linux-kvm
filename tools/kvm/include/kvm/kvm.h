@@ -72,6 +72,8 @@ struct kvm {
     bool                          irqchip_in_kernel;
 };
 
+typedef void (*kvm_mmio_callback_t)(struct kvm_cpu *, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr);
+
 void kvm__set_dir(const char *fmt, ...);
 const char *kvm__get_dir(void);
 
@@ -93,7 +95,7 @@ bool kvm__emulate_io(struct kvm_cpu *kvm_cpu, u16 port, void *data, int directio
 bool kvm__emulate_mmio(struct kvm_cpu *cpu, u64 phys_addr, u8 *data, u32 len, u8 is_write);
 void kvm__register_mem(struct kvm *kvm, u64 guest_phys, u64 size, void *userspace_addr);
 bool kvm__register_coalesced_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void (*kvm_mmio_callback_fn)(struct kvm_cpu *, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr), void *ptr);
-bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void (*kvm_mmio_callback_fn)(struct kvm_cpu *, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr), void *ptr);
+bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, kvm_mmio_callback_t mmio_callback, void *ptr);
 bool kvm__deregister_mmio(struct kvm *kvm, u64 phys_addr);
 void kvm__pause(void);
 void kvm__continue(void);

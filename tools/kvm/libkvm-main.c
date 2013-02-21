@@ -496,6 +496,7 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     //TODO: Move these registration steps to kvm_processor component and use node maps.
     // Also consider modifying the node maps for device type; Input/Output or Output only.
     // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
+	// Similarly node maps can be different for different VCPUs (master devices)
 
     //kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL); // Causes some problems in Printing to TTY
     kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL);
