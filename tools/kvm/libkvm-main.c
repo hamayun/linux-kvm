@@ -443,9 +443,9 @@ void kvm_help(void)
 }
 
 void **p_sysc_cpu_wrapper = NULL;
-extern uint64_t systemc_kvm_read_memory (void *_this, uint64_t addr,
+extern uint64_t systemc_mmio_read (void *_this, uint64_t addr,
 										 int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_kvm_write_memory (void *_this, uint64_t addr,
+extern void     systemc_mmio_write (void *_this, uint64_t addr,
 										  unsigned char *data, int nbytes, unsigned int *ns, int bIO);
 extern void     systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
 
@@ -478,12 +478,12 @@ static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 l
     if(is_write)
     {
         //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        systemc_kvm_write_memory(p_sysc_cpu_wrapper[cpu->cpu_id], addr, data, len, NULL, 1);
+        systemc_mmio_write(p_sysc_cpu_wrapper[cpu->cpu_id], addr, data, len, NULL, 1);
     }
     else
     {
         //printf("MMIO Read: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
-        value = systemc_kvm_read_memory(p_sysc_cpu_wrapper[cpu->cpu_id], addr, len, NULL, 1);
+        value = systemc_mmio_read(p_sysc_cpu_wrapper[cpu->cpu_id], addr, len, NULL, 1);
         for (i = 0; i < len; i++)
             data[i] = *((unsigned char *) &value + i);
     }
