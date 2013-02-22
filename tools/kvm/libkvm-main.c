@@ -22,6 +22,7 @@
 
 #include "kvm/libkvm-main.h"
 #include "gdb_srv.h"
+#include "hosttime.h"
 
 #define DEFAULT_KVM_DEV	    "/dev/kvm"
 #define DEFAULT_CONSOLE	    "serial"
@@ -444,10 +445,11 @@ void kvm_help(void)
 
 void **p_sysc_cpu_wrapper = NULL;
 extern uint64_t systemc_mmio_read (void *_this, uint64_t addr,
-										 int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_mmio_write (void *_this, uint64_t addr,
-										  unsigned char *data, int nbytes, unsigned int *ns, int bIO);
-extern void     systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
+						           int nbytes, unsigned int *ns, int bIO);
+extern void systemc_mmio_write (void *_this, uint64_t addr,
+							    unsigned char *data, int nbytes, unsigned int *ns, int bIO);
+extern void systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
+extern void semihosting_profile_function(void *_this, uint32_t value);
 
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
@@ -561,10 +563,26 @@ static struct ioport_operations annotation_ioport_ops = {
     .io_out	    = generic_annotation_function,
 };
 
+// Profile Support
+static bool semihosting_profile_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+    uint32_t * pdata = (uint32_t *) data;
+
+    // printf("semihosting_profile_out: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+	semihosting_profile_function(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], *pdata);
+    return true;
+}
+
+static struct ioport_operations semihosting_profile_ops = {
+    .io_in	    = NULL,
+    .io_out	    = semihosting_profile_out,
+};
+
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
     ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
     ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
+    ioport__register(HOSTTIME_BASEPORT, &semihosting_profile_ops, 0x1, NULL);
 
 	return 0;
 }
