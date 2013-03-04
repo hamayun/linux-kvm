@@ -23,6 +23,8 @@
 #include "kvm/libkvm-main.h"
 #include "gdb_srv.h"
 #include "hosttime.h"
+#include "abstract_noc.h"
+#include "interconnect_master.h"
 
 #define DEFAULT_KVM_DEV	    "/dev/kvm"
 #define DEFAULT_CONSOLE	    "serial"
@@ -493,23 +495,47 @@ static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 l
     return;
 }
 
+/*
+ * Register MMIO Callbacks for SystemC Device Models
+ * Node maps can be different for different VCPUs (master devices); 
+ * Currently we use Node0 for All VCPUs i.e. All CPUs share the Same View of SystemC Devices
+ * Future Work: Decide which type of MMIO mapping should be used for each device i.e. Normal or Coalesced ?
+ */
 static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
 {
-    //TODO: Move these registration steps to kvm_processor component and use node maps.
-    // Also consider modifying the node maps for device type; Input/Output or Output only.
-    // So as to decide which type of MMIO mapping be used. Normal or Coalesced.
-	// Similarly node maps can be different for different VCPUs (master devices)
+    int             i, k;
+    FILE            *file;
+    char            file_name[256];
+    interconnect_master_map_el map = {0};
 
-    //kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL); // Causes some problems in Printing to TTY
-    kvm__register_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC1000000, 0x10, generic_mmio_handler, NULL);
+    sprintf (file_name, "%s/node%d.map", MAP_FILES_DIR, 0 /* VCPU-ID? */);
+    if ((file = fopen (file_name, "rt")) == NULL)
+    {
+        printf ("Error (masterid=%d): Cannot open the map file %s!\n", 0 /* VCPU-ID? */, file_name);
+        exit (1);                   
+    }
 
-    kvm__register_mmio(kvm, 0xC3000000, 0x1000, generic_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC4000000, 0x100000, generic_mmio_handler, NULL);
-
-    kvm__register_mmio(kvm, 0xC6000000, 0x100000, generic_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6500000, 0x100000, generic_mmio_handler, NULL);
-    kvm__register_mmio(kvm, 0xC6A00000, 0x100000, generic_mmio_handler, NULL);
+    i = 0;
+    while (1)
+    {
+        k = fscanf (file, "0x%lX 0x%lX 0x%lX %d\n",
+                    &map.begin_address, &map.end_address, &map.intern_offset, &map.slave_id);
+        if (k <= 0)
+            break;
+        i++;
+        if (k > 0 && k < 4)
+        {
+            printf ("Error (masterid=%d): Invalid map file %s, line %d!\n", 0 /* VCPU-ID? */, file_name, i);
+            exit (1);
+        }
+	
+		/* Register MMIO */
+		kvm__register_mmio(kvm, map.begin_address, (map.end_address - map.begin_address), generic_mmio_handler, NULL);
+		
+		/* Output only and Non-Reactive (Writing to Device Register has no side-effects) Devices _should_ use Coalesced MMIO */
+    	// kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL); // Causes some problems in Printing to TTY
+    }
+    fclose (file);
     return 0;
 }
 

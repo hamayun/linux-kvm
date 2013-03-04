@@ -164,7 +164,8 @@ DEFINES	+= -DKVMTOOLS_VERSION='"$(KVMTOOLS_VERSION)"'
 KVM_INCLUDE := include
 #CFLAGS	+= $(CPPFLAGS) $(DEFINES) -I$(KVM_INCLUDE) -I../../include -I../../arch/$(ARCH)/include/ -Os -g
 CFLAGS	+= $(CPPFLAGS) $(DEFINES) -I$(KVM_INCLUDE) -I../../include -I../../arch/$(ARCH)/include/ -O0 -g
-CFLAGS	+= -I$(SYSTEMC_INCLUDE_FOR_KVM)
+CFLAGS	+= -I$(SYSTEMC_INCLUDE_FOR_KVM)/kvm_wrapper_smp
+CFLAGS	+= -I$(SYSTEMC_INCLUDE_FOR_KVM)/abstract_noc
 
 ifneq ($(WERROR),0)
 	WARNINGS += -Werror

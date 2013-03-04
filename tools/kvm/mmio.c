@@ -94,6 +94,7 @@ bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void 
 	struct mmio_mapping *mmio;
 	int ret;
 
+	// printf("Registering MMIO for phys_addr = 0x%08x, len = 0x%08x\n", (u32) phys_addr, (u32) phys_addr_len);
 	mmio = malloc(sizeof(*mmio));
 	if (mmio == NULL)
 		return false;
