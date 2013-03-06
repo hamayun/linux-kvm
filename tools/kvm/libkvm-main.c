@@ -518,8 +518,9 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     i = 0;
     while (1)
     {
-        k = fscanf (file, "0x%lX 0x%lX 0x%lX %d\n",
-                    &map.begin_address, &map.end_address, &map.intern_offset, &map.slave_id);
+        k = fscanf (file, "0x%lX 0x%lX 0x%lX %d %d\n",
+                    &map.begin_address, &map.end_address, &map.intern_offset,
+                    &map.slave_id, &map.coalesced);
         if (k <= 0)
             break;
         i++;
@@ -528,12 +529,19 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
             printf ("Error (masterid=%d): Invalid map file %s, line %d!\n", 0 /* VCPU-ID? */, file_name, i);
             exit (1);
         }
-	
-		/* Register MMIO */
-		kvm__register_mmio(kvm, map.begin_address, (map.end_address - map.begin_address), generic_mmio_handler, NULL);
-		
-		/* Output only and Non-Reactive (Writing to Device Register has no side-effects) Devices _should_ use Coalesced MMIO */
-    	// kvm__register_coalesced_mmio(kvm, 0xC0000000, 0x40, generic_mmio_handler, NULL); // Causes some problems in Printing to TTY
+
+        if(map.coalesced)
+        {
+            /* RAM-like and Non-Reactive (Writing to Device Register has no side-effects) Devices _should_ use Coalesced MMIO */
+			/* ATTN: Configuring TTY Device for Coalesced MMIO causes VCPU Scheduling Issue for Unknown Reasons; 
+                     VCPU0 is scheduled only; Rest remain Idle */
+            kvm__register_coalesced_mmio(kvm, map.begin_address, (map.end_address - map.begin_address), generic_mmio_handler, NULL);
+        }
+        else
+        {
+            /* Register MMIO */
+            kvm__register_mmio(kvm, map.begin_address, (map.end_address - map.begin_address), generic_mmio_handler, NULL);
+        }
     }
     fclose (file);
     return 0;

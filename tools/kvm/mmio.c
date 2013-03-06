@@ -62,6 +62,7 @@ bool kvm__register_coalesced_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_
 	struct kvm_coalesced_mmio_zone zone;
 	int ret;
 
+	printf("Registering MMIO: phys_addr = 0x%08x, len = 0x%08x [Coalesced]\n", (u32) phys_addr, (u32) phys_addr_len);
 	mmio = malloc(sizeof(*mmio));
 	if (mmio == NULL)
 		return false;
@@ -94,7 +95,7 @@ bool kvm__register_mmio(struct kvm *kvm, u64 phys_addr, u64 phys_addr_len, void 
 	struct mmio_mapping *mmio;
 	int ret;
 
-	// printf("Registering MMIO for phys_addr = 0x%08x, len = 0x%08x\n", (u32) phys_addr, (u32) phys_addr_len);
+	printf("Registering MMIO: phys_addr = 0x%08x, len = 0x%08x\n", (u32) phys_addr, (u32) phys_addr_len);
 	mmio = malloc(sizeof(*mmio));
 	if (mmio == NULL)
 		return false;
