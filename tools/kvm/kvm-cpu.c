@@ -420,12 +420,20 @@ void kvm_cpu__show_page_tables(struct kvm_cpu *vcpu)
 			*pte4, *pte3, *pte2, *pte1);
 }
 
+extern void systemc_call_wait(void * _this);
+extern void **p_sysc_cpu_wrapper;
+
 void kvm_cpu__run(struct kvm_cpu *vcpu)
 {
 	int err;
 
 	err = ioctl(vcpu->vcpu_fd, KVM_RUN, 0);
-	if (err && (errno != EINTR && errno != EAGAIN))
+	if(err && errno == EAGAIN)
+	{
+		printf("vcpu %d: run returned EAGAIN\n", (u32) vcpu->cpu_id);
+		systemc_call_wait(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+	}
+	if (err && (errno != EINTR))
 		die_perror("KVM_RUN failed");
 }
 
@@ -531,7 +539,7 @@ static void kvm_init_cpu_signals(CPUState *env)
     }
 }
 
-extern pthread_mutex_t kvm_global_mutex;
+//extern pthread_mutex_t kvm_global_mutex;
 extern pthread_cond_t kvm_work_cond;
 
 int kvm_cpu__start(struct kvm_cpu *cpu)
@@ -547,7 +555,7 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 	signal(SIGKVMPAUSE, kvm_cpu_signal_handler);
 
     // TODO: Use mutex_lock defined in kvm/mutex.h
-    kvm_mutex_lock(&kvm_global_mutex);
+//    kvm_mutex_lock(&kvm_global_mutex);
     kvm_init_cpu_signals(cpu);
 
 	kvm_cpu__setup_cpuid(cpu);
@@ -569,12 +577,12 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
             cpu->kvm_vcpu_dirty = 0;
         }
 
-        kvm_wait_io_event(cpu);
-        kvm_mutex_unlock(&kvm_global_mutex);
-
+//        kvm_wait_io_event(cpu);
+//        kvm_mutex_unlock(&kvm_global_mutex);
+		//printf("Calling KVM_RUN for VCPU %d\n", (u32)cpu->cpu_id);
         kvm_cpu__run(cpu);
 
-        kvm_mutex_lock(&kvm_global_mutex);
+//        kvm_mutex_lock(&kvm_global_mutex);
 
 		switch (cpu->kvm_run->exit_reason)
         {

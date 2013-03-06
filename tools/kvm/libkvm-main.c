@@ -794,6 +794,7 @@ int kvm_run_cpu(void * kvm_cpu_inst)
     int exit_code = 0;
     void *ret;
 
+#if 0
     if (pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu) != 0)
         die("unable to create KVM VCPU thread");
 
@@ -803,6 +804,9 @@ int kvm_run_cpu(void * kvm_cpu_inst)
         if (pthread_join(kvm_cpu->thread, &ret) != 0)
             exit_code = 1;
 	}
+#else
+	kvm_cpu_thread(kvm_cpu);
+#endif
 
     return exit_code;
 }
