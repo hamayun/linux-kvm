@@ -421,7 +421,50 @@ void kvm_cpu__show_page_tables(struct kvm_cpu *vcpu)
 }
 
 extern void systemc_call_wait(void * _this);
+extern void systemc_notify_init_event(void *_this);
 extern void **p_sysc_cpu_wrapper;
+
+/* Check if the current CPU has received an init IPI */
+int kvm_cpu_init_sipi_received(void * kvm_cpu_inst)
+{
+    struct kvm_cpu * vcpu = kvm_cpu_inst;
+	struct kvm_mp_state state;
+
+	ioctl(vcpu->vcpu_fd, KVM_GET_MP_STATE, &state);
+	switch(state.mp_state)
+	{
+		case KVM_MP_STATE_UNINITIALIZED:
+			//printf("VCPU-%d: KVM_MP_STATE_UNINITIALIZED\n", (u32) vcpu->cpu_id);
+			break;
+
+		case KVM_MP_STATE_INIT_RECEIVED: 
+			printf("VCPU-%d: KVM_MP_STATE_INIT_RECEIVED\n", (u32) vcpu->cpu_id);
+			break;
+		
+		case KVM_MP_STATE_SIPI_RECEIVED: 
+			printf("VCPU-%d: KVM_MP_STATE_SIPI_RECEIVED\n", (u32) vcpu->cpu_id);
+			return 1;
+	}
+
+	return 0;
+} 
+
+/* Check if the current CPU is in Runnable State */ 
+int kvm_cpu_is_runnable(void * kvm_cpu_inst)
+{
+    struct kvm_cpu * vcpu = kvm_cpu_inst;
+	struct kvm_mp_state state;
+
+	ioctl(vcpu->vcpu_fd, KVM_GET_MP_STATE, &state);
+	if(state.mp_state == KVM_MP_STATE_RUNNABLE)
+	{
+		printf("VCPU-%d: KVM_MP_STATE_RUNNABLE\n", (u32) vcpu->cpu_id);
+		return 1;
+	}
+
+//	printf("VCPU-%d: NOT RUNNABLE\n", (u32) vcpu->cpu_id);
+	return 0;
+} 
 
 void kvm_cpu__run(struct kvm_cpu *vcpu)
 {
