@@ -788,6 +788,7 @@ void * kvm_cpu_internal_init(void * kvm_instance, void * sc_kvm_cpu, int cpu_id)
     return (void *) kvm_cpus[cpu_id];
 }
 
+#if 0
 int kvm_run_cpu(void * kvm_cpu_inst)
 {
     struct kvm_cpu * kvm_cpu = kvm_cpu_inst;
@@ -810,6 +811,7 @@ int kvm_run_cpu(void * kvm_cpu_inst)
 
     return exit_code;
 }
+#endif
 
 int kvm_internal_exit(void)
 {

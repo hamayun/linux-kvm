@@ -420,7 +420,8 @@ void kvm_cpu__show_page_tables(struct kvm_cpu *vcpu)
 			*pte4, *pte3, *pte2, *pte1);
 }
 
-extern void systemc_call_wait(void * _this);
+extern void systemc_notify_runnable_event(void *_this);
+extern void systemc_wait_runnable_event(void * _this);
 extern void systemc_notify_init_event(void *_this);
 extern void **p_sysc_cpu_wrapper;
 
@@ -458,7 +459,7 @@ int kvm_cpu_is_runnable(void * kvm_cpu_inst)
 	ioctl(vcpu->vcpu_fd, KVM_GET_MP_STATE, &state);
 	if(state.mp_state == KVM_MP_STATE_RUNNABLE)
 	{
-		printf("VCPU-%d: KVM_MP_STATE_RUNNABLE\n", (u32) vcpu->cpu_id);
+		//printf("VCPU-%d: KVM_MP_STATE_RUNNABLE\n", (u32) vcpu->cpu_id);
 		return 1;
 	}
 
@@ -471,10 +472,10 @@ void kvm_cpu__run(struct kvm_cpu *vcpu)
 	int err;
 
 	err = ioctl(vcpu->vcpu_fd, KVM_RUN, 0);
-	if(err && errno == EAGAIN)
+	if(err && (errno == EAGAIN || errno == EINTR))
 	{
-		printf("vcpu %d: run returned EAGAIN\n", (u32) vcpu->cpu_id);
-		systemc_call_wait(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+		printf("VCPU %d: run returned EAGAIN\n", (u32) vcpu->cpu_id);
+		systemc_wait_runnable_event(p_sysc_cpu_wrapper[vcpu->cpu_id]);
 	}
 	if (err && (errno != EINTR))
 		die_perror("KVM_RUN failed");
@@ -609,10 +610,19 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
         kvm_update_guest_debug(cpu, 0);
     }
 
-    while (cpu->is_running) {
-		if (cpu->paused) {
+	return 0;
+}
+
+int kvm_cpu__execute(struct kvm_cpu *cpu)
+{
+/*		if (cpu->paused) {
 			kvm__notify_paused();
 			cpu->paused = 0;
+		}
+*/
+//		if(cpu->cpu_id != 0)
+		{
+			printf("Calling KVM_RUN for VCPU %d\n", (u32)cpu->cpu_id);
 		}
 
         if (cpu->kvm_vcpu_dirty) {
@@ -679,7 +689,12 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 		}
 
 		kvm_cpu__handle_coalesced_mmio(cpu);
-    }
+
+		if(cpu->cpu_id == 0)
+		{
+			if(kvm_cpu_is_runnable(p_sysc_cpu_wrapper[1]))
+				systemc_notify_runnable_event(p_sysc_cpu_wrapper[1]);
+		}
 
 exit_kvm:
 	return 0;
