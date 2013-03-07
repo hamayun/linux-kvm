@@ -257,6 +257,7 @@ static void handle_pause(int fd, u32 type, u32 len, u8 *msg)
 
 static void handle_sigalrm(int sig)
 {
+	printf("MMH: Inside the Handle SIGALRM Handler\n");
 /*
 	serial8250__inject_interrupt(kvm);
 	virtio_console__inject_interrupt(kvm);
