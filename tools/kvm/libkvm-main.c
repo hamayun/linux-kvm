@@ -548,26 +548,22 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     return 0;
 }
 
-static bool semihosting_io_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
-{
-    uint32_t * pdata = (uint32_t *) data;
-    *pdata = 1;
-
-    printf("semihosting_io_in: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
-    return true;
-}
-
-static bool semihosting_io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
 
-    printf("semihosting_io_out: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+    printf("sleep_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+           (u32)kvm_cpu->cpu_id, port, size, *pdata);
+
+	if(*pdata == 0)		// Ask a self sleep
+		systemc_wait_until_runnable(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
+		
     return true;
 }
 
-static struct ioport_operations semihosting_read_write_ioport_ops = {
-    .io_in	    = semihosting_io_in,
-    .io_out	    = semihosting_io_out,
+static struct ioport_operations systemc_sleep_request_io = {
+    .io_in	    = NULL,
+    .io_out	    = sleep_request_callback,
 };
 
 // Annotation Support
@@ -615,8 +611,10 @@ static struct ioport_operations semihosting_profile_ops = {
 
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
-    ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
-    ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
+	// Register I/O ports reserved for Sleep Requests from Guest to SystemC
+    ioport__register(0x1000, &systemc_sleep_request_io, 0x10+1, NULL);
+    
+	ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
     ioport__register(HOSTTIME_BASEPORT, &semihosting_profile_ops, 0x1, NULL);
 
 	return 0;
