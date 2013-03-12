@@ -12,4 +12,5 @@ int kvm_run_cpu(void * kvm_cpu_inst);
 int kvm_internal_exit(void);
 void kvm_help(void);
 
+void kvm_cpu_set_run_state(void *vcpu, int run_state);
 #endif

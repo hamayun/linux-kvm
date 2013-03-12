@@ -643,6 +643,10 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
 {
     struct kvm_work_item wi;
 
+	func(data);
+	return;
+	
+	/*
     if (kvm_cpu_is_self(env)) {
         DPRINTF("%s: CPU#%d is Self\n", __func__, env->cpu_id);
         func(data);
@@ -679,6 +683,7 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
 
     DPRINTF("%s: Finished waiting on kvm_work_cond\n", __func__);
     return;
+	*/
 }
 
 static void kvm_wait_io_event_common(CPUState *env)

@@ -482,7 +482,11 @@ static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 l
 
     if(is_write)
     {
-        //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
+		if(addr == 0xC0000000)
+		{
+			// TODO: Remove this Hardcoded 16
+			addr = (u32) addr + (cpu->cpu_id * 16);	// 16 comes from TTY; where TTY_SPAN is 4 Registers (16 = 4*4)
+		}
         systemc_mmio_write(p_sysc_cpu_wrapper[cpu->cpu_id], addr, data, len, NULL, 1);
     }
     else
@@ -552,12 +556,26 @@ static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cp
 {
     uint32_t * pdata = (uint32_t *) data;
 
-    printf("sleep_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
-           (u32)kvm_cpu->cpu_id, port, size, *pdata);
-
 	if(*pdata == 0)		// Ask a self sleep
+	{
+	    printf("sleep_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+           (u32)kvm_cpu->cpu_id, port, size, *pdata);
 		systemc_wait_until_runnable(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
+	}
+
+	if(*pdata == 1)		// Call wait to let someone else run 
+	{
+//	    printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+//           (u32)kvm_cpu->cpu_id, port, size, *pdata);
+		if(kvm_cpu->cpu_id == 0)
+			systemc_notify_runnable_event(p_sysc_cpu_wrapper[1]);
+		else
+			systemc_notify_runnable_event(p_sysc_cpu_wrapper[0]);
 		
+		// Put myself to sleep
+		systemc_wait_zero_time(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
+	}
+
     return true;
 }
 

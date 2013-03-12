@@ -474,42 +474,80 @@ int kvm_cpu_is_runnable(void * kvm_cpu_inst)
 
 //	printf("VCPU-%d: NOT RUNNABLE STATE = %d\n", (u32) vcpu->cpu_id, state.mp_state);
 	return 0;
-} 
+}
 
 
-int kvm_cpu__run(struct kvm_cpu *vcpu)
+void kvm_cpu_set_run_state(struct kvm_cpu *vcpu, int run_state)
 {
-	int err, i;
-	int kick_vcpu_id;
+	struct kvm_run_state rs;
+	rs.run_state = run_state;
 
+//	printf("Address of Runstate: %p\n", & rs);
+
+    if (ioctl(vcpu->vcpu_fd, KVM_RUN_STATE, & rs) < 0)
+        die_perror("KVM_RUN_STATE failed");
+}
+
+void * kvm_cpu__run(struct kvm_cpu *vcpu, int *retry_to_run)
+{
+	int err;
+	int kick_vcpu_id;
+	*retry_to_run = 0;	
+
+	//if(vcpu->cpu_id != 0)
+	//	printf("\t\t\t");
+	//printf("Calling KVM_RUN VCPU-%d ... \n", (u32)vcpu->cpu_id);
+
+	kvm_lock_run_mutex(p_sysc_cpu_wrapper[vcpu->cpu_id]);
 	err = ioctl(vcpu->vcpu_fd, KVM_RUN, 0);
-	// TODO: User errno for CPU to KICK IT 
-	if(err && (errno == 99 || errno >= 100 || errno == EINTR || errno == EAGAIN))
+	kvm_unlock_run_mutex(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+	
+	//if(vcpu->cpu_id != 0)
+	//	printf("\t\t\t");
+	//printf("Return KVM_RUN VCPU-%d ... [errno = %d]\n", (u32)vcpu->cpu_id, errno);
+
+	if(err && errno == 98)
 	{
-		//printf("VCPU-%d: KVM_RUN Returned with errno = %d\n", (u32) vcpu->cpu_id, errno);
-		kick_vcpu_id = errno - 100;
-		
-		if(kick_vcpu_id >= 0 && kick_vcpu_id < vcpu->kvm->nrcpus)
-			systemc_notify_runnable_event(p_sysc_cpu_wrapper[kick_vcpu_id]);
-		/*
-		for(i = 0; i< vcpu->kvm->nrcpus; i++)
+		int run_count = systemc_running_cpu_count(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+		systemc_running_cpu_status(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+
+		if(run_count == 0)
 		{
-			if(kvm_cpus[i] != vcpu && kvm_cpu_is_runnable(kvm_cpus[i]))
-			{
-				printf("Going to Notify VCPU-%d\n", i);
-				systemc_notify_runnable_event(p_sysc_cpu_wrapper[i]);
-			}	
-		}*/
-		
-		// Put myself to sleep
-	    // systemc_wait_until_runnable(p_sysc_cpu_wrapper[vcpu->cpu_id]);
-		return -1;
+			printf("Unblocking the only runnable CPU-%d\n", vcpu->cpu_id);
+			kvm_cpu_set_run_state(vcpu, 0);
+			*retry_to_run = 1;
+			return NULL;
+		}
+	}
+
+	if(err && (errno == 99 || errno >= 100))
+	{
+		if(errno == 99){
+			systemc_wait_until_runnable(p_sysc_cpu_wrapper[vcpu->cpu_id]);
+			*retry_to_run = 1;
+			return NULL;
+		}
+		else
+		{
+			kick_vcpu_id = errno - 100;
+			if(kick_vcpu_id >= 0 && kick_vcpu_id < vcpu->kvm->nrcpus)
+				return (p_sysc_cpu_wrapper[kick_vcpu_id]);
+			else
+				return NULL;		
+		}
 	}
 
 	if(err && (errno != EAGAIN && errno != EINTR))
+	{
 		die_perror("KVM_RUN failed");
+	}
 
-	return 0;
+	return NULL;
+}
+
+void kvm_cpu__kick(void * kick_cpu)
+{
+	systemc_notify_runnable_event(kick_cpu);
 }
 
 /*
@@ -577,6 +615,7 @@ void kvm_cpu__reboot(void)
 			pthread_kill(kvm_cpus[i]->thread, SIGKVMEXIT);
 }
 
+/*
 static int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset)
 {
     struct kvm_signal_mask *sigmask;
@@ -594,8 +633,9 @@ static int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset)
 
     return r;
 }
+*/
 
-static void dummy_signal(int sig){}
+//static void dummy_signal(int sig){}
 
 /*
 static void kvm_init_cpu_signals(CPUState *env)
@@ -655,33 +695,35 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
 
 int kvm_cpu__execute(struct kvm_cpu *cpu)
 {
+		void * kick_cpu = NULL;
+		int retry_to_run = 0;
+		
+		/*
 		if (cpu->paused) {
 			kvm__notify_paused();
 			cpu->paused = 0;
 		}
+		*/
 
         if (cpu->kvm_vcpu_dirty) {
             kvm_arch_put_registers(cpu);
             cpu->kvm_vcpu_dirty = 0;
         }
 
-//        kvm_wait_io_event(cpu);
-//        kvm_mutex_unlock(&kvm_global_mutex);
-		//printf("Calling KVM_RUN for VCPU-%d ... ", (u32)cpu->cpu_id);
+		//if(cpu->cpu_id == 0)
+		// TODO: Make CPU-1 Wait for CPU-O's MMIO Completion !!!
+		// printf("Calling KVM_RUN VCPU-%d ... \n", (u32)cpu->cpu_id);
 		//fflush(stdout);
 
-        if(kvm_cpu__run(cpu) == -1)
-			return -1;	// Currenty not runnable; retry again
-
-		//printf("KVM_RUN Return VCPU %d\n", (u32)cpu->cpu_id);
-
-//        kvm_mutex_lock(&kvm_global_mutex);
+        kick_cpu = kvm_cpu__run(cpu, &retry_to_run);
+		if(retry_to_run) return 0;
 
 		switch (cpu->kvm_run->exit_reason)
         {
         case KVM_EXIT_UNKNOWN:
-            //printf("KVM_EXIT_UNKNOWN [CPU # %ld]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
-            //        cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), (unsigned int)(cpu->kvm_run->fail_entry));
+            //printf("KVM_EXIT_UNKNOWN [CPU # %d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
+            //          (u32) cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), 
+            //          (unsigned int)(cpu->kvm_run->fail_entry.hardware_entry_failure_reason));
             break;
 		case KVM_EXIT_DEBUG:
             kvm_arch_handle_debug(cpu);
@@ -706,8 +748,11 @@ int kvm_cpu__execute(struct kvm_cpu *cpu)
 		case KVM_EXIT_MMIO: {
 			bool ret;
 #ifdef DEBUG_MMIO
-       		printf("NORMAL_MMIO: Address = 0x%08X, Length = %d, is_write = %d\n",
-                   (u32) cpu->kvm_run->mmio.phys_addr, (u32) cpu->kvm_run->mmio.len, (u32) cpu->kvm_run->mmio.is_write);
+       		printf("MMIO@VCPU-%d: Address = 0x%08X, Length = %d, is_write = %d ... ",
+				   (u32) cpu->cpu_id,
+                   (u32) cpu->kvm_run->mmio.phys_addr,
+				   (u32) cpu->kvm_run->mmio.len, 
+				   (u32) cpu->kvm_run->mmio.is_write);
 #endif
 	        ret = kvm__emulate_mmio(cpu,
      				                cpu->kvm_run->mmio.phys_addr,
@@ -716,24 +761,27 @@ int kvm_cpu__execute(struct kvm_cpu *cpu)
                                     cpu->kvm_run->mmio.is_write);
 			if (!ret)
 				goto panic_kvm;
+       		
+//			printf("Done !!!\n");
 			break;
 		}
 		case KVM_EXIT_INTR:
 			printf("KVM_EXIT_INTR: VCPU-%d\n", (u32) cpu->cpu_id);
-//			if (cpu->is_running)
-//				break;
-			goto exit_kvm;
+			break;
+
 		case KVM_EXIT_SHUTDOWN:
-			goto exit_kvm;
-		default:
-			goto panic_kvm;
+			printf("KVM_EXIT_SHUTDOWN: VCPU-%d\n", (u32) cpu->cpu_id);
+			return -2;
 		}
 
 		kvm_cpu__handle_coalesced_mmio(cpu);
 
-exit_kvm:
-	return 0;
+		if(kick_cpu){
+//			printf("%s: Going to Kick .... \n", __func__);
+			kvm_cpu__kick(kick_cpu);
+		}
+		return 0;
 
 panic_kvm:
-	return 1;
+	return -2;
 }
