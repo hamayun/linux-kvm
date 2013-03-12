@@ -747,6 +747,9 @@ struct kvm_clock_data {
 #define KVM_GET_XCRS		  _IOR(KVMIO,  0xa6, struct kvm_xcrs)
 #define KVM_SET_XCRS		  _IOW(KVMIO,  0xa7, struct kvm_xcrs)
 
+/* MMH: Set/Get VCPU Run State from SystemC */
+#define KVM_RUN_STATE    	  _IOW(KVMIO,  0xaa, struct kvm_run_state)
+
 #define KVM_DEV_ASSIGN_ENABLE_IOMMU	(1 << 0)
 
 struct kvm_assigned_pci_dev {
@@ -799,6 +802,11 @@ struct kvm_assigned_msix_entry {
 	__u32 gsi;
 	__u16 entry; /* The index of entry in the MSI-X table */
 	__u16 padding[3];
+};
+
+/* MMH: For GET/SET VCPU State; w.r.t SystemC */
+struct kvm_run_state {
+	__u32 run_state;
 };
 
 #endif /* __LINUX_KVM_H */

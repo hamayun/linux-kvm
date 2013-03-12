@@ -425,7 +425,6 @@ extern void systemc_notify_runnable_event(void *_this);
 extern void **p_sysc_cpu_wrapper;
 
 /* Check if the current CPU has received an init IPI */
-/*
 int kvm_cpu_init_sipi_received(void * kvm_cpu_inst)
 {
     struct kvm_cpu * vcpu = kvm_cpu_inst;
@@ -449,7 +448,6 @@ int kvm_cpu_init_sipi_received(void * kvm_cpu_inst)
 
 	return 0;
 }
-*/
 
 /* Check if the current CPU is in Runnable State */ 
 int kvm_cpu_is_runnable(void * kvm_cpu_inst)
@@ -476,7 +474,6 @@ int kvm_cpu_is_runnable(void * kvm_cpu_inst)
 	return 0;
 }
 
-
 void kvm_cpu_set_run_state(struct kvm_cpu *vcpu, int run_state)
 {
 	struct kvm_run_state rs;
@@ -494,31 +491,9 @@ void * kvm_cpu__run(struct kvm_cpu *vcpu, int *retry_to_run)
 	int kick_vcpu_id;
 	*retry_to_run = 0;	
 
-	//if(vcpu->cpu_id != 0)
-	//	printf("\t\t\t");
 	//printf("Calling KVM_RUN VCPU-%d ... \n", (u32)vcpu->cpu_id);
 
-	kvm_lock_run_mutex(p_sysc_cpu_wrapper[vcpu->cpu_id]);
 	err = ioctl(vcpu->vcpu_fd, KVM_RUN, 0);
-	kvm_unlock_run_mutex(p_sysc_cpu_wrapper[vcpu->cpu_id]);
-	
-	//if(vcpu->cpu_id != 0)
-	//	printf("\t\t\t");
-	//printf("Return KVM_RUN VCPU-%d ... [errno = %d]\n", (u32)vcpu->cpu_id, errno);
-
-	if(err && errno == 98)
-	{
-		int run_count = systemc_running_cpu_count(p_sysc_cpu_wrapper[vcpu->cpu_id]);
-		systemc_running_cpu_status(p_sysc_cpu_wrapper[vcpu->cpu_id]);
-
-		if(run_count == 0)
-		{
-			printf("Unblocking the only runnable CPU-%d\n", vcpu->cpu_id);
-			kvm_cpu_set_run_state(vcpu, 0);
-			*retry_to_run = 1;
-			return NULL;
-		}
-	}
 
 	if(err && (errno == 99 || errno >= 100))
 	{
@@ -779,6 +754,7 @@ int kvm_cpu__execute(struct kvm_cpu *cpu)
 		if(kick_cpu){
 //			printf("%s: Going to Kick .... \n", __func__);
 			kvm_cpu__kick(kick_cpu);
+			return -1;		// We kicked someone else; So we should block for some time.
 		}
 		return 0;
 
