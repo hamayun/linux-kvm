@@ -3,10 +3,11 @@
 
 #include "kvm_import_export.h"
 
-#define KVM_CPU_OK			 0
-#define KVM_CPU_BLOCK 		-1
-#define KVM_CPU_PANIC 		-2
-#define KVM_CPU_SHUTDOWN 	-3
+#define KVM_CPU_OK			 		 0
+#define KVM_CPU_RETRY 				-1
+#define KVM_CPU_BLOCK_AFTER_KICK 	-2
+#define KVM_CPU_PANIC 				-3
+#define KVM_CPU_SHUTDOWN 			-4
 
 #define SYSTEMC_SYNC_PORT		0x1000
 #define SYSTEMC_WAIT_PORT   	0x2000

@@ -481,14 +481,12 @@ int kvm_cpu_is_runnable(void * kvm_cpu_inst)
 		return 0;
 	}
 	
-	if(state.mp_state == KVM_MP_STATE_RUNNABLE ||
-       state.mp_state == KVM_MP_STATE_SIPI_RECEIVED)
+	if(state.mp_state == KVM_MP_STATE_RUNNABLE)
 	{
 		//printf("VCPU-%d: KVM_MP_STATE_RUNNABLE\n", (u32) vcpu->cpu_id);
 		return 1;
 	}
 
-//	printf("VCPU-%d: NOT RUNNABLE STATE = %d\n", (u32) vcpu->cpu_id, state.mp_state);
 	return 0;
 }
 
@@ -517,7 +515,6 @@ void * kvm_cpu__run(struct kvm_cpu *vcpu, int *retry_to_run)
 	if(err && (errno == 99 || errno >= 100))
 	{
 		if(errno == 99){
-			systemc_wait_until_runnable(p_sysc_cpu_wrapper[vcpu->cpu_id]);
 			*retry_to_run = 1;
 			return NULL;
 		}
@@ -702,7 +699,7 @@ int kvm_cpu_execute(void *vcpu)
 	// printf("Calling KVM_RUN VCPU-%d ... \n", (u32)cpu->cpu_id);
     kick_cpu = kvm_cpu__run(cpu, &retry_to_run);
 	if(retry_to_run) 
-		return KVM_CPU_OK;
+		return KVM_CPU_RETRY;
 
 	switch (cpu->kvm_run->exit_reason)
     {
@@ -763,7 +760,7 @@ int kvm_cpu_execute(void *vcpu)
 
 		if(kick_cpu){
 			kvm_cpu_kick(kick_cpu);
-			return KVM_CPU_BLOCK;		// We kicked someone else; So we should block for some time.
+			return KVM_CPU_BLOCK_AFTER_KICK;		// We kicked someone else; So we should block for some time.
 	}
 
 	return KVM_CPU_OK;

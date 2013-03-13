@@ -562,6 +562,7 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
 static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
+	unsigned int i;
 
 	if(*pdata == 0)		// Ask a self sleep
 	{
@@ -572,12 +573,16 @@ static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cp
 
 	if(*pdata == 1)		// Call wait to let someone else run 
 	{
-//	    printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
-//           (u32)kvm_cpu->cpu_id, port, size, *pdata);
-		if(kvm_cpu->cpu_id == 0)
-			systemc_notify_runnable_event(p_sysc_cpu_wrapper[1]);
-		else
-			systemc_notify_runnable_event(p_sysc_cpu_wrapper[0]);
+	    printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+               (u32)kvm_cpu->cpu_id, port, size, *pdata);
+
+		for(i = 0; i < (u32) kvm_cpu->kvm->nrcpus; i++)
+		{
+			if(i == kvm_cpu->cpu_id)
+				continue;
+
+			systemc_notify_runnable_event(p_sysc_cpu_wrapper[i]);
+		}
 		
 		// Put myself to sleep
 		systemc_wait_zero_time(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
