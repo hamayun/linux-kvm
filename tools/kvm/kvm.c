@@ -421,9 +421,6 @@ int kvm__max_cpus(struct kvm *kvm)
 	return ret;
 }
 
-extern pthread_mutex_t kvm_global_mutex;
-extern pthread_cond_t kvm_work_cond;
-
 struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 {
 	struct kvm_pit_config pit_config = { .flags = KVM_PIT_SPEAKER_DUMMY, };
@@ -505,9 +502,6 @@ struct kvm *kvm__init(const char *kvm_dev, u64 ram_size, const char *name)
 
     kvm->irqchip_in_kernel = true;
 	kvm->name = name;
-
-    kvm_cond_init(&kvm_work_cond);
-    kvm_mutex_init(&kvm_global_mutex);
 
 	//kvm_ipc__start(kvm__create_socket(kvm));
 	//kvm_ipc__register_handler(KVM_IPC_PID, kvm__pid);

@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include <kvm/libkvm-main.h>
 #include "gdb_srv.h"
 #include "gdb_srv_arch.h"
 
@@ -424,8 +425,8 @@ extern void systemc_wait_until_runnable(void *_this);
 extern void systemc_notify_runnable_event(void *_this);
 extern void **p_sysc_cpu_wrapper;
 
-/* Check if the current CPU has received an init IPI */
-int kvm_cpu_init_sipi_received(void * kvm_cpu_inst)
+/* Check if the current CPU has received an Init IPI */
+int kvm_cpu_init_received(void * kvm_cpu_inst)
 {
     struct kvm_cpu * vcpu = kvm_cpu_inst;
 	struct kvm_mp_state state;
@@ -439,8 +440,25 @@ int kvm_cpu_init_sipi_received(void * kvm_cpu_inst)
 
 		case KVM_MP_STATE_INIT_RECEIVED: 
 			printf("VCPU-%d: KVM_MP_STATE_INIT_RECEIVED\n", (u32) vcpu->cpu_id);
+			return 1;
+	}
+
+	return 0;
+}
+
+/* Check if the current CPU has received an Startup IPI */
+int kvm_cpu_sipi_received(void * kvm_cpu_inst)
+{
+    struct kvm_cpu * vcpu = kvm_cpu_inst;
+	struct kvm_mp_state state;
+
+	ioctl(vcpu->vcpu_fd, KVM_GET_MP_STATE, &state);
+	switch(state.mp_state)
+	{
+		case KVM_MP_STATE_UNINITIALIZED:
+			//printf("VCPU-%d: KVM_MP_STATE_UNINITIALIZED\n", (u32) vcpu->cpu_id);
 			break;
-		
+
 		case KVM_MP_STATE_SIPI_RECEIVED: 
 			printf("VCPU-%d: KVM_MP_STATE_SIPI_RECEIVED\n", (u32) vcpu->cpu_id);
 			return 1;
@@ -474,16 +492,17 @@ int kvm_cpu_is_runnable(void * kvm_cpu_inst)
 	return 0;
 }
 
+#if 0
 void kvm_cpu_set_run_state(struct kvm_cpu *vcpu, int run_state)
 {
 	struct kvm_run_state rs;
 	rs.run_state = run_state;
 
 //	printf("Address of Runstate: %p\n", & rs);
-
     if (ioctl(vcpu->vcpu_fd, KVM_RUN_STATE, & rs) < 0)
         die_perror("KVM_RUN_STATE failed");
 }
+#endif
 
 void * kvm_cpu__run(struct kvm_cpu *vcpu, int *retry_to_run)
 {
@@ -520,7 +539,7 @@ void * kvm_cpu__run(struct kvm_cpu *vcpu, int *retry_to_run)
 	return NULL;
 }
 
-void kvm_cpu__kick(void * kick_cpu)
+void kvm_cpu_kick(void * kick_cpu)
 {
 	systemc_notify_runnable_event(kick_cpu);
 }
@@ -635,10 +654,11 @@ static void kvm_init_cpu_signals(CPUState *env)
 */
 
 //extern pthread_mutex_t kvm_global_mutex;
-extern pthread_cond_t kvm_work_cond;
+//extern pthread_cond_t kvm_work_cond;
 
-int kvm_cpu__start(struct kvm_cpu *cpu)
+int kvm_cpu_reset(void *vcpu)
 {
+	struct kvm_cpu *cpu = (struct kvm_cpu *) vcpu;
 	/*
 	if(cpu->cpu_id == 0)
 	{
@@ -665,36 +685,27 @@ int kvm_cpu__start(struct kvm_cpu *cpu)
         kvm_update_guest_debug(cpu, 0);
     }
 
-	return 0;
+	return KVM_CPU_OK;
 }
 
-int kvm_cpu__execute(struct kvm_cpu *cpu)
+int kvm_cpu_execute(void *vcpu)
 {
-		void * kick_cpu = NULL;
-		int retry_to_run = 0;
+	struct kvm_cpu *cpu = (struct kvm_cpu *) vcpu;
+	void * kick_cpu = NULL;
+	int retry_to_run = 0;
 		
-		/*
-		if (cpu->paused) {
-			kvm__notify_paused();
-			cpu->paused = 0;
-		}
-		*/
+	if (cpu->kvm_vcpu_dirty) {
+		kvm_arch_put_registers(cpu);
+		cpu->kvm_vcpu_dirty = 0;
+	}
 
-        if (cpu->kvm_vcpu_dirty) {
-            kvm_arch_put_registers(cpu);
-            cpu->kvm_vcpu_dirty = 0;
-        }
+	// printf("Calling KVM_RUN VCPU-%d ... \n", (u32)cpu->cpu_id);
+    kick_cpu = kvm_cpu__run(cpu, &retry_to_run);
+	if(retry_to_run) 
+		return KVM_CPU_OK;
 
-		//if(cpu->cpu_id == 0)
-		// TODO: Make CPU-1 Wait for CPU-O's MMIO Completion !!!
-		// printf("Calling KVM_RUN VCPU-%d ... \n", (u32)cpu->cpu_id);
-		//fflush(stdout);
-
-        kick_cpu = kvm_cpu__run(cpu, &retry_to_run);
-		if(retry_to_run) return 0;
-
-		switch (cpu->kvm_run->exit_reason)
-        {
+	switch (cpu->kvm_run->exit_reason)
+    {
         case KVM_EXIT_UNKNOWN:
             //printf("KVM_EXIT_UNKNOWN [CPU # %d]: H/W Exit Reason = 0x%08X, cpu->kvm_run->fail_entry = 0x%X\n",
             //          (u32) cpu->cpu_id, (unsigned int)(cpu->kvm_run->hw.hardware_exit_reason), 
@@ -737,7 +748,6 @@ int kvm_cpu__execute(struct kvm_cpu *cpu)
 			if (!ret)
 				goto panic_kvm;
        		
-//			printf("Done !!!\n");
 			break;
 		}
 		case KVM_EXIT_INTR:
@@ -746,18 +756,18 @@ int kvm_cpu__execute(struct kvm_cpu *cpu)
 
 		case KVM_EXIT_SHUTDOWN:
 			printf("KVM_EXIT_SHUTDOWN: VCPU-%d\n", (u32) cpu->cpu_id);
-			return -2;
+			return KVM_CPU_SHUTDOWN;
 		}
 
 		kvm_cpu__handle_coalesced_mmio(cpu);
 
 		if(kick_cpu){
-//			printf("%s: Going to Kick .... \n", __func__);
-			kvm_cpu__kick(kick_cpu);
-			return -1;		// We kicked someone else; So we should block for some time.
-		}
-		return 0;
+			kvm_cpu_kick(kick_cpu);
+			return KVM_CPU_BLOCK;		// We kicked someone else; So we should block for some time.
+	}
+
+	return KVM_CPU_OK;
 
 panic_kvm:
-	return -2;
+	return KVM_CPU_PANIC;
 }

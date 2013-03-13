@@ -269,6 +269,7 @@ static void handle_stop(int fd, u32 type, u32 len, u8 *msg)
 	kvm_cpu__reboot();
 }
 
+#if 0
 static void *kvm_cpu_thread(void *arg)
 {
 	current_kvm_cpu	    = arg;
@@ -297,6 +298,7 @@ panic_kvm:
 
 	return (void *) (intptr_t) 1;
 }
+#endif
 
 static char kernel[PATH_MAX];
 
@@ -454,6 +456,11 @@ extern void systemc_mmio_write (void *_this, uint64_t addr,
 extern void systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
 extern void semihosting_profile_function(void *_this, uint32_t value);
 
+extern void systemc_wait_until_runnable(void * _this);
+extern void systemc_wait_zero_time(void *_this);
+extern void systemc_wait_us(void *_this, int us);
+extern void systemc_notify_runnable_event(void *_this);
+
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
     u64 value;
@@ -584,8 +591,25 @@ static struct ioport_operations systemc_sleep_request_io = {
     .io_out	    = sleep_request_callback,
 };
 
+static bool systemc_wait_us_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+    uint32_t * pdata = (uint32_t *) data;
+
+	// Forward request to SystemC
+	//printf("%s: CPU-%d, Port = %X, Size = %d, Data = %d\n",
+    //       __func__, (u32)kvm_cpu->cpu_id, port, size, *pdata);
+	systemc_wait_us(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], *pdata);
+
+	return true;
+}
+
+static struct ioport_operations systemc_wait_us_io = {
+    .io_in	    = NULL,
+    .io_out	    = systemc_wait_us_callback,
+};
+
+
 // Annotation Support
-#define ANNOTATION_BASEPORT 0x4000
 static bool generic_annotation_function(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	struct kvm * kvm = kvm_cpu->kvm;
@@ -630,7 +654,8 @@ static struct ioport_operations semihosting_profile_ops = {
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
 	// Register I/O ports reserved for Sleep Requests from Guest to SystemC
-    ioport__register(0x1000, &systemc_sleep_request_io, 0x10+1, NULL);
+    ioport__register(SYSTEMC_SYNC_PORT, &systemc_sleep_request_io, 0x10+1, NULL);
+    ioport__register(SYSTEMC_WAIT_PORT, &systemc_wait_us_io, 0x10+1, NULL);
     
 	ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
     ioport__register(HOSTTIME_BASEPORT, &semihosting_profile_ops, 0x1, NULL);
