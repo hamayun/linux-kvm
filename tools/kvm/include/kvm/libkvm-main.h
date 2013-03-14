@@ -11,6 +11,7 @@
 
 #define SYSTEMC_SYNC_PORT		0x1000
 #define SYSTEMC_WAIT_PORT   	0x2000
+#define SYSTEMC_TEST_N_SET_PORT	0x3000
 #define ANNOTATION_BASEPORT 	0x4000
 
 void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus,

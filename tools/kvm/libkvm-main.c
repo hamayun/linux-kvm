@@ -459,7 +459,7 @@ extern void semihosting_profile_function(void *_this, uint32_t value);
 extern void systemc_wait_until_runnable(void * _this);
 extern void systemc_wait_zero_time(void *_this);
 extern void systemc_wait_us(void *_this, int us);
-extern void systemc_wait_until_kick_or_timeout(void *_this);
+extern void systemc_wait_until_kick_or_timeout(void *_this, int locker_cpu_id);
 extern void systemc_notify_runnable_event(void *_this);
 
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
@@ -563,30 +563,12 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
 static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
-	unsigned int i;
 
 	if(*pdata == 0)		// Ask a self sleep
 	{
 	    printf("sleep_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
            (u32)kvm_cpu->cpu_id, port, size, *pdata);
 		systemc_wait_until_runnable(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
-	}
-
-	if(*pdata == 1)		// Call wait to let someone else run 
-	{
-	    //printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
-        //       (u32)kvm_cpu->cpu_id, port, size, *pdata);
-
-		for(i = 0; i < (u32) kvm_cpu->kvm->nrcpus; i++)
-		{
-			if(i == kvm_cpu->cpu_id)
-				continue;
-
-			systemc_notify_runnable_event(p_sysc_cpu_wrapper[i]);
-		}
-		
-		// Put myself to sleep
-		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
 	}
 
     return true;
@@ -596,6 +578,40 @@ static struct ioport_operations systemc_sleep_request_io = {
     .io_in	    = NULL,
     .io_out	    = sleep_request_callback,
 };
+
+static bool test_n_set_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+    int32_t locker_cpu_id = *((int32_t *) data) - 1;
+//	unsigned int i;
+
+	if(locker_cpu_id >= 0 && locker_cpu_id < kvm_cpu->kvm->nrcpus)		// Call wait to let someone else run 
+	{
+	    //printf("%s: TryLock CPU-%d, Locker CPU-%d\n",
+		//	   __func__, (u32)kvm_cpu->cpu_id, cpu_id);
+		
+		/*
+		for(i = 0; i < (u32) kvm_cpu->kvm->nrcpus; i++)
+		{
+			if(i == kvm_cpu->cpu_id)
+				continue;
+
+			systemc_notify_runnable_event(p_sysc_cpu_wrapper[i]);
+		}
+		*/
+		
+		systemc_notify_runnable_event(p_sysc_cpu_wrapper[locker_cpu_id]);
+		// Put myself to sleep
+		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], locker_cpu_id);
+	}
+
+    return true;
+}
+
+static struct ioport_operations systemc_test_n_set_io = {
+    .io_in	    = NULL,
+    .io_out	    = test_n_set_callback,
+};
+
 
 static bool systemc_wait_us_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
@@ -662,6 +678,7 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 	// Register I/O ports reserved for Sleep Requests from Guest to SystemC
     ioport__register(SYSTEMC_SYNC_PORT, &systemc_sleep_request_io, 0x10+1, NULL);
     ioport__register(SYSTEMC_WAIT_PORT, &systemc_wait_us_io, 0x10+1, NULL);
+    ioport__register(SYSTEMC_TEST_N_SET_PORT, &systemc_test_n_set_io, 0x10+1, NULL);
     
 	ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
     ioport__register(HOSTTIME_BASEPORT, &semihosting_profile_ops, 0x1, NULL);
