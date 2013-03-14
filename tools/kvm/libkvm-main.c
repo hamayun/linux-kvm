@@ -459,6 +459,7 @@ extern void semihosting_profile_function(void *_this, uint32_t value);
 extern void systemc_wait_until_runnable(void * _this);
 extern void systemc_wait_zero_time(void *_this);
 extern void systemc_wait_us(void *_this, int us);
+extern void systemc_wait_until_kick_or_timeout(void *_this);
 extern void systemc_notify_runnable_event(void *_this);
 
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
@@ -573,8 +574,8 @@ static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cp
 
 	if(*pdata == 1)		// Call wait to let someone else run 
 	{
-	    printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
-               (u32)kvm_cpu->cpu_id, port, size, *pdata);
+	    //printf("kick_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+        //       (u32)kvm_cpu->cpu_id, port, size, *pdata);
 
 		for(i = 0; i < (u32) kvm_cpu->kvm->nrcpus; i++)
 		{
@@ -585,7 +586,7 @@ static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cp
 		}
 		
 		// Put myself to sleep
-		systemc_wait_zero_time(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
+		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
 	}
 
     return true;
