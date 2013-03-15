@@ -599,7 +599,7 @@ static bool test_n_set_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, 
 		}
 		*/
 		
-		systemc_notify_runnable_event(p_sysc_cpu_wrapper[locker_cpu_id]);
+		// systemc_notify_runnable_event(p_sysc_cpu_wrapper[locker_cpu_id]);
 		// Put myself to sleep
 		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], locker_cpu_id);
 	}
