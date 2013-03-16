@@ -793,9 +793,14 @@ int kvm_run_cpu(void * kvm_cpu_inst)
     struct kvm_cpu * kvm_cpu = kvm_cpu_inst;
     int exit_code = 0;
     void *ret;
+	int rval;
 
-    if (pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu) != 0)
+	// TODO: MMH Thread Creation is now per SystemC Thread so GDB Support has a problem in 
+	// in launching a KICK to the still to be created threads.
+	rval = pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu);
+	if(rval != 0){
         die("unable to create KVM VCPU thread");
+	}
 
 	/* Only VCPU #0 is going to exit by itself when shutting down */
 	if (kvm_cpu->cpu_id == 0)
