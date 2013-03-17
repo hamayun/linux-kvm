@@ -689,6 +689,7 @@ int kvm_cpu_execute(void *vcpu)
 {
 	struct kvm_cpu *cpu = (struct kvm_cpu *) vcpu;
 	void * kick_cpu = NULL;
+	int cpu_status = KVM_CPU_OK;
 	int retry_to_run = 0;
 		
 	if (cpu->kvm_vcpu_dirty) {
@@ -699,7 +700,7 @@ int kvm_cpu_execute(void *vcpu)
 	// printf("Calling KVM_RUN VCPU-%d ... \n", (u32)cpu->cpu_id);
     kick_cpu = kvm_cpu__run(cpu, &retry_to_run);
 	if(retry_to_run) 
-		return KVM_CPU_RETRY;
+		cpu_status = KVM_CPU_RETRY;
 
 	switch (cpu->kvm_run->exit_reason)
     {
@@ -753,17 +754,17 @@ int kvm_cpu_execute(void *vcpu)
 
 		case KVM_EXIT_SHUTDOWN:
 			printf("KVM_EXIT_SHUTDOWN: VCPU-%d\n", (u32) cpu->cpu_id);
-			return KVM_CPU_SHUTDOWN;
+			cpu_status = KVM_CPU_SHUTDOWN;
 		}
 
 		kvm_cpu__handle_coalesced_mmio(cpu);
 
 		if(kick_cpu){
 			kvm_cpu_kick(kick_cpu);
-			return KVM_CPU_BLOCK_AFTER_KICK;		// We kicked someone else; So we should block for some time.
-	}
+			cpu_status = KVM_CPU_BLOCK_AFTER_KICK; // We kicked someone else; So we should block for some time.
+		}
 
-	return KVM_CPU_OK;
+	return cpu_status;
 
 panic_kvm:
 	return KVM_CPU_PANIC;

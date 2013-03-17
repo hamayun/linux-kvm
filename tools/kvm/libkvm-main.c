@@ -582,25 +582,9 @@ static struct ioport_operations systemc_sleep_request_io = {
 static bool test_n_set_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     int32_t locker_cpu_id = *((int32_t *) data) - 1;
-//	unsigned int i;
 
 	if(locker_cpu_id >= 0 && locker_cpu_id < kvm_cpu->kvm->nrcpus)		// Call wait to let someone else run 
 	{
-	    //printf("%s: TryLock CPU-%d, Locker CPU-%d\n",
-		//	   __func__, (u32)kvm_cpu->cpu_id, cpu_id);
-		
-		/*
-		for(i = 0; i < (u32) kvm_cpu->kvm->nrcpus; i++)
-		{
-			if(i == kvm_cpu->cpu_id)
-				continue;
-
-			systemc_notify_runnable_event(p_sysc_cpu_wrapper[i]);
-		}
-		*/
-		
-		// systemc_notify_runnable_event(p_sysc_cpu_wrapper[locker_cpu_id]);
-		// Put myself to sleep
 		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], locker_cpu_id);
 	}
 
