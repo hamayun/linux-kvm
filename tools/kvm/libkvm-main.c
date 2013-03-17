@@ -460,7 +460,6 @@ extern void systemc_wait_until_runnable(void * _this);
 extern void systemc_wait_zero_time(void *_this);
 extern void systemc_wait_us(void *_this, int us);
 extern void systemc_wait_until_kick_or_timeout(void *_this, int locker_cpu_id);
-extern void systemc_notify_runnable_event(void *_this);
 
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
