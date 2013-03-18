@@ -274,6 +274,7 @@ static int kvm_guest_debug_workarounds(CPUState *env)
     return ret;
 }
 
+#if 0
 static int kvm_thread_is_self(pthread_t thread)
 {
    return pthread_equal(pthread_self(), thread);
@@ -285,6 +286,7 @@ static int kvm_cpu_is_self(void *_env)
 
     return kvm_thread_is_self(env->thread);
 }
+#endif
 
 int kvm_arch_get_registers(CPUState *env)
 {
@@ -493,6 +495,7 @@ static void kvm_invoke_set_guest_debug(void *data)
     DPRINTF("%s: IOCTL for CPU#%d ... Done\n", __func__, (uint32_t) env->cpu_id);
 }
 
+#if 0
 static void kvm_cpu_kick_thread(CPUState *env)
 {
     int err;
@@ -518,6 +521,7 @@ static void kvm_cpu_kick(void *_env)
         env->thread_kicked = true;
     }
 }
+#endif
 
 void kvm_cond_init(pthread_cond_t *cond)
 {
@@ -600,6 +604,7 @@ void kvm_mutex_unlock(pthread_mutex_t *mutex)
     }
 }
 
+#if 0
 static bool kvm_irqchip_in_kernel(struct kvm * kvm)
 {
     return (kvm->irqchip_in_kernel);
@@ -638,9 +643,14 @@ static void flush_queued_work(CPUState *env)
     DPRINTF("%s: kvm_cond_broadcast @kvm_work_cond\n", __func__);
     kvm_cond_broadcast(&kvm_work_cond);
 }
+#endif
 
 static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
 {
+	func(data);
+	return;
+
+#if 0
     struct kvm_work_item wi;
 
     if (kvm_cpu_is_self(env)) {
@@ -679,8 +689,10 @@ static void run_on_cpu(CPUState *env, void (*func)(void *data), void *data)
 
     DPRINTF("%s: Finished waiting on kvm_work_cond\n", __func__);
     return;
+#endif
 }
 
+#if 0
 static void kvm_wait_io_event_common(CPUState *env)
 {
     flush_queued_work(env);
@@ -697,6 +709,7 @@ void kvm_wait_io_event(CPUState *env)
 
     kvm_wait_io_event_common(env);
 }
+#endif
 
 int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
 {

@@ -257,6 +257,7 @@ static void handle_pause(int fd, u32 type, u32 len, u8 *msg)
 
 static void handle_sigalrm(int sig)
 {
+	printf("MMH: Inside the Handle SIGALRM Handler\n");
 /*
 	serial8250__inject_interrupt(kvm);
 	virtio_console__inject_interrupt(kvm);
@@ -268,6 +269,7 @@ static void handle_stop(int fd, u32 type, u32 len, u8 *msg)
 	kvm_cpu__reboot();
 }
 
+#if 0
 static void *kvm_cpu_thread(void *arg)
 {
 	current_kvm_cpu	    = arg;
@@ -296,6 +298,7 @@ panic_kvm:
 
 	return (void *) (intptr_t) 1;
 }
+#endif
 
 static char kernel[PATH_MAX];
 
@@ -453,6 +456,11 @@ extern void systemc_mmio_write (void *_this, uint64_t addr,
 extern void systemc_annotate_function(void *_this, void *vm_addr, void *ptr);
 extern void semihosting_profile_function(void *_this, uint32_t value);
 
+extern void systemc_wait_until_runnable(void * _this);
+extern void systemc_wait_zero_time(void *_this);
+extern void systemc_wait_us(void *_this, int us);
+extern void systemc_wait_until_kick_or_timeout(void *_this, int locker_cpu_id);
+
 static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 len, u8 is_write, void *ptr)
 {
     u64 value;
@@ -481,7 +489,11 @@ static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 l
 
     if(is_write)
     {
-        //printf("MMIO Write: addr = 0x%x, len = 0x%x\n", (u32) addr, len);
+		if(addr == 0xC0000000)
+		{
+			// TODO: Remove this Hardcoded 16
+			addr = (u32) addr + (cpu->cpu_id * 16);	// 16 comes from TTY; where TTY_SPAN is 4 Registers (16 = 4*4)
+		}
         systemc_mmio_write(p_sysc_cpu_wrapper[cpu->cpu_id], addr, data, len, NULL, 1);
     }
     else
@@ -547,30 +559,62 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
     return 0;
 }
 
-static bool semihosting_io_in(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
-{
-    uint32_t * pdata = (uint32_t *) data;
-    *pdata = 1;
-
-    printf("semihosting_io_in: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
-    return true;
-}
-
-static bool semihosting_io_out(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+static bool sleep_request_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
     uint32_t * pdata = (uint32_t *) data;
 
-    printf("semihosting_io_out: Port = %X, Size = %d, Data = 0x%X\n", port, size, *pdata);
+	if(*pdata == 0)		// Ask a self sleep
+	{
+	    printf("sleep_request_callback: CPU-%d, Port = %X, Size = %d, Data = 0x%X\n",
+           (u32)kvm_cpu->cpu_id, port, size, *pdata);
+		systemc_wait_until_runnable(p_sysc_cpu_wrapper[kvm_cpu->cpu_id]);
+	}
+
     return true;
 }
 
-static struct ioport_operations semihosting_read_write_ioport_ops = {
-    .io_in	    = semihosting_io_in,
-    .io_out	    = semihosting_io_out,
+static struct ioport_operations systemc_sleep_request_io = {
+    .io_in	    = NULL,
+    .io_out	    = sleep_request_callback,
 };
 
+static bool test_n_set_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+    int32_t locker_cpu_id = *((int32_t *) data) - 1;
+
+	if(locker_cpu_id >= 0 && locker_cpu_id < kvm_cpu->kvm->nrcpus)		// Call wait to let someone else run 
+	{
+		systemc_wait_until_kick_or_timeout(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], locker_cpu_id);
+	}
+
+    return true;
+}
+
+static struct ioport_operations systemc_test_n_set_io = {
+    .io_in	    = NULL,
+    .io_out	    = test_n_set_callback,
+};
+
+
+static bool systemc_wait_us_callback(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
+{
+    uint32_t * pdata = (uint32_t *) data;
+
+	// Forward request to SystemC
+	//printf("%s: CPU-%d, Port = %X, Size = %d, Data = %d\n",
+    //       __func__, (u32)kvm_cpu->cpu_id, port, size, *pdata);
+	systemc_wait_us(p_sysc_cpu_wrapper[kvm_cpu->cpu_id], *pdata);
+
+	return true;
+}
+
+static struct ioport_operations systemc_wait_us_io = {
+    .io_in	    = NULL,
+    .io_out	    = systemc_wait_us_callback,
+};
+
+
 // Annotation Support
-#define ANNOTATION_BASEPORT 0x4000
 static bool generic_annotation_function(struct ioport *ioport, struct kvm_cpu *kvm_cpu, u16 port, void *data, int size)
 {
 	struct kvm * kvm = kvm_cpu->kvm;
@@ -614,8 +658,12 @@ static struct ioport_operations semihosting_profile_ops = {
 
 static int kvm_register_io_callbacks(struct kvm *kvm)
 {
-    ioport__register(0x1000, &semihosting_read_write_ioport_ops, 0x10+1, NULL);
-    ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
+	// Register I/O ports reserved for Sleep Requests from Guest to SystemC
+    ioport__register(SYSTEMC_SYNC_PORT, &systemc_sleep_request_io, 0x10+1, NULL);
+    ioport__register(SYSTEMC_WAIT_PORT, &systemc_wait_us_io, 0x10+1, NULL);
+    ioport__register(SYSTEMC_TEST_N_SET_PORT, &systemc_test_n_set_io, 0x10+1, NULL);
+    
+	ioport__register(ANNOTATION_BASEPORT, &annotation_ioport_ops, 0x1, NULL);
     ioport__register(HOSTTIME_BASEPORT, &semihosting_profile_ops, 0x1, NULL);
 
 	return 0;
@@ -788,45 +836,9 @@ void * kvm_cpu_internal_init(void * kvm_instance, void * sc_kvm_cpu, int cpu_id)
     return (void *) kvm_cpus[cpu_id];
 }
 
-int kvm_run_cpu(void * kvm_cpu_inst)
-{
-    struct kvm_cpu * kvm_cpu = kvm_cpu_inst;
-    int exit_code = 0;
-    void *ret;
-	int rval;
-
-	// TODO: MMH Thread Creation is now per SystemC Thread so GDB Support has a problem in 
-	// in launching a KICK to the still to be created threads.
-	rval = pthread_create(&kvm_cpu->thread, NULL, kvm_cpu_thread, kvm_cpu);
-	if(rval != 0){
-        die("unable to create KVM VCPU thread");
-	}
-
-	/* Only VCPU #0 is going to exit by itself when shutting down */
-	if (kvm_cpu->cpu_id == 0)
-	{
-        if (pthread_join(kvm_cpu->thread, &ret) != 0)
-            exit_code = 1;
-	}
-
-    return exit_code;
-}
-
 int kvm_internal_exit(void)
 {
     int exit_code = 0;
-    void *ret;
-    int i;
-
-	for (i = 1; i < nrcpus; i++) {
-    	if (kvm_cpus[i]->is_running) {
-        	pthread_kill(kvm_cpus[i]->thread, SIGKVMEXIT);
-        	if (pthread_join(kvm_cpus[i]->thread, &ret) != 0)
-            	die("pthread_join");
-        }
-    	if (ret != NULL)
-        	exit_code = 1;
-    }
 
 	if(p_sysc_cpu_wrapper)
 	{
