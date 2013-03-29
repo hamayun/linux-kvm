@@ -513,17 +513,17 @@ static void generic_mmio_handler(struct kvm_cpu * cpu, u64 addr, u8 *data, u32 l
  * Currently we use Node0 for All VCPUs i.e. All CPUs share the Same View of SystemC Devices
  * Future Work: Decide which type of MMIO mapping should be used for each device i.e. Normal or Coalesced ?
  */
-static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
+static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm, int node_id)
 {
     int             i, k;
     FILE            *file;
     char            file_name[256];
     interconnect_master_map_el map = {0};
 
-    sprintf (file_name, "%s/node%d.map", MAP_FILES_DIR, 0 /* VCPU-ID? */);
+    sprintf (file_name, "%s/node%d.map", MAP_FILES_DIR, node_id);
     if ((file = fopen (file_name, "rt")) == NULL)
     {
-        printf ("Error (masterid=%d): Cannot open the map file %s!\n", 0 /* VCPU-ID? */, file_name);
+        printf ("Error (masterid=%d): Cannot open the map file %s!\n", node_id, file_name);
         exit (1);                   
     }
 
@@ -538,7 +538,7 @@ static int kvm_register_systemc_mmio_callbacks(struct kvm *kvm)
         i++;
         if (k > 0 && k < 4)
         {
-            printf ("Error (masterid=%d): Invalid map file %s, line %d!\n", 0 /* VCPU-ID? */, file_name, i);
+            printf ("Error (masterid=%d): Invalid map file %s, line %d!\n", node_id, file_name, i);
             exit (1);
         }
 
@@ -669,7 +669,7 @@ static int kvm_register_io_callbacks(struct kvm *kvm)
 	return 0;
 }
 
-void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, uint64_t ram_size /* MBs */) 
+void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t node_id, uint32_t num_cpus, uint64_t ram_size /* MBs */) 
 {
 	static char default_name[20];
 	int max_cpus, recommended_cpus;
@@ -677,7 +677,7 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, ui
 	// ioport_debug = 1;
 
     // Fill in the function table for SystemC (Called by Platform or Components)
-	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
+	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_kvm_fc_t) gdb_srv_start_and_wait;
 
 	signal(SIGALRM, handle_sigalrm);
 	signal(SIGUSR1, handle_sigusr1);
@@ -760,7 +760,7 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t num_cpus, ui
         kvm->enable_debug_mode = false;
     }
 
-    kvm_register_systemc_mmio_callbacks(kvm);
+    kvm_register_systemc_mmio_callbacks(kvm, node_id);
     kvm_register_io_callbacks(kvm);
 
 	max_cpus = kvm__max_cpus(kvm);
