@@ -80,9 +80,9 @@ struct biosregs {
 	u32			eflags;
 };
 
-void int3_handler(struct biosregs *regs);
-void int10_handler(struct biosregs *regs);
-void int15_handler(struct biosregs *regs);
+bioscall void int3_handler(struct biosregs *regs);
+bioscall void int10_handler(struct biosregs *regs);
+bioscall void int15_handler(struct biosregs *regs);
 
 #endif
 

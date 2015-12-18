@@ -677,7 +677,7 @@ void * kvm_internal_init(struct kvm_import_export_t * kie, uint32_t node_id, uin
 	// ioport_debug = 1;
 
     // Fill in the function table for SystemC (Called by Platform or Components)
-	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_kvm_fc_t) gdb_srv_start_and_wait;
+	kie->exp_gdb_srv_start_and_wait = (gdb_srv_start_and_wait_fc_t) gdb_srv_start_and_wait;
 
 	signal(SIGALRM, handle_sigalrm);
 	signal(SIGUSR1, handle_sigusr1);
